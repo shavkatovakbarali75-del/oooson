@@ -1,5 +1,7 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, Keyboard } from 'grammy';
 import dotenv from 'dotenv';
+import { db } from './firebase.js';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 dotenv.config({ path: '.env.local' });
 
@@ -13,6 +15,9 @@ if (!BOT_TOKEN) {
 
 const bot = new Bot(BOT_TOKEN);
 
+// Simple in-memory state management for registration steps
+const registrationState = new Map<number, { step: 'WAITING_NAME', phone: string }>();
+
 // Error handler
 bot.catch((err) => {
   console.error('Bot xatosi:', err.message);
@@ -20,62 +25,103 @@ bot.catch((err) => {
 
 // /start komandasi
 bot.command('start', async (ctx) => {
-  const userName = ctx.from?.first_name || "do'stim";
-  
-  const keyboard = new InlineKeyboard()
-    .webApp("📚 Oson So'z'ni ochish", APP_URL);
+  const userId = ctx.from?.id;
+  if (!userId) return;
 
-  await ctx.reply(
-    `Salom, ${userName}! 👋\n\n` +
-    `🎓 <b>Oson So'z</b> — ingliz tili so'zlarini oson va samarali yodlash platformasi.\n\n` +
-    `🧠 Sun'iy intellekt yordamida so'z yarating\n` +
-    `🃏 Flashkartalar bilan yodlang\n` +
-    `🎮 6 xil mashq rejimida mashq qiling\n` +
-    `🏆 Reytingda boshqalar bilan raqobatlashing\n\n` +
-    `Boshlash uchun quyidagi tugmani bosing! 👇`,
-    {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
+  try {
+    // Check if user is already registered in Firebase
+    const docRef = doc(db, 'telegram_users', userId.toString());
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      // User is already registered
+      const keyboard = new InlineKeyboard().webApp("📚 Oson So'z'ni ochish", APP_URL);
+      await ctx.reply(
+        `Salom yana bir bor, ${docSnap.data().name}! 👋\n\nDavom etish uchun ilovani oching:`,
+        { reply_markup: keyboard }
+      );
+    } else {
+      // User is new, ask for phone number
+      const keyboard = new Keyboard()
+        .requestContact("📱 Raqamni yuborish").resized().oneTime();
+      
+      await ctx.reply(
+        `Salom, ${ctx.from?.first_name || "do'stim"}! 👋\n\n` +
+        `🎓 <b>Oson So'z</b> platformasiga xush kelibsiz.\n` +
+        `Ro'yxatdan o'tish uchun quyidagi tugmani bosib, telefon raqamingizni yuboring. 👇`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: keyboard,
+        }
+      );
     }
-  );
+  } catch (err) {
+    console.error("Firebase error on start:", err);
+    await ctx.reply("Tizimda xatolik yuz berdi. Iltimos keyinroq urinib ko'ring.");
+  }
 });
 
-// /help komandasi
-bot.command('help', async (ctx) => {
-  const keyboard = new InlineKeyboard()
-    .webApp("📚 Ochish", APP_URL);
+// Handle contact sharing
+bot.on('message:contact', async (ctx) => {
+  const userId = ctx.from.id;
+  const phone = ctx.message.contact.phone_number;
 
-  await ctx.reply(
-    `📖 <b>Oson So'z — Yordam</b>\n\n` +
-    `Mavjud komandalar:\n` +
-    `/start - Botni boshlash\n` +
-    `/help - Yordam\n` +
-    `/app - Ilovani ochish\n\n` +
-    `Savollar uchun: @akbarali_shavkatov`,
-    {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    }
-  );
-});
+  // Verify that the contact belongs to the user
+  if (ctx.message.contact.user_id !== userId) {
+    await ctx.reply("Iltimos, faqat o'zingizning raqamingizni yuboring!");
+    return;
+  }
 
-// /app komandasi
-bot.command('app', async (ctx) => {
-  const keyboard = new InlineKeyboard()
-    .webApp("📚 Oson So'z'ni ochish", APP_URL);
+  // Save to state and ask for name
+  registrationState.set(userId, { step: 'WAITING_NAME', phone });
 
-  await ctx.reply("Ilovani ochish uchun tugmani bosing 👇", {
-    reply_markup: keyboard,
+  await ctx.reply("Rahmat! Endi platformada ko'rinadigan ismingizni kiriting (masalan, Akbarali):", {
+    reply_markup: { remove_keyboard: true }
   });
 });
 
-// Oddiy xabar uchun javob
+// Handle text messages (for name input and general)
 bot.on('message:text', async (ctx) => {
-  const keyboard = new InlineKeyboard()
-    .webApp("📚 Oson So'z'ni ochish", APP_URL);
+  const userId = ctx.from.id;
+  const text = ctx.message.text;
 
+  // Check if user is in registration process
+  if (registrationState.has(userId)) {
+    const state = registrationState.get(userId);
+    if (state?.step === 'WAITING_NAME') {
+      const phone = state.phone;
+      const name = text.trim();
+
+      try {
+        // Save to Firebase
+        await setDoc(doc(db, 'telegram_users', userId.toString()), {
+          telegramId: userId,
+          phone: phone,
+          name: name,
+          registeredAt: new Date().toISOString()
+        });
+
+        // Clear state
+        registrationState.delete(userId);
+
+        // Send success message and WebApp button
+        const keyboard = new InlineKeyboard().webApp("📚 Oson So'z'ni ochish", APP_URL);
+        await ctx.reply(
+          `Tabriklaymiz, ${name}! 🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz.\n\nEndi quyidagi tugma orqali ilovaga kirishingiz mumkin. 👇`,
+          { reply_markup: keyboard }
+        );
+      } catch (err) {
+        console.error("Error saving user:", err);
+        await ctx.reply("Kechirasiz, ro'yxatdan o'tishda xatolik yuz berdi.");
+      }
+      return;
+    }
+  }
+
+  // Normal text response
+  const keyboard = new InlineKeyboard().webApp("📚 Oson So'z'ni ochish", APP_URL);
   await ctx.reply(
-    "So'z yodlashni boshlash uchun quyidagi tugmani bosing yoki /start komandasini yuboring! 📚",
+    "Ilovani ochish uchun quyidagi tugmani bosing yoki /start komandasini yuboring! 📚",
     { reply_markup: keyboard }
   );
 });

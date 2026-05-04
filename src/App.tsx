@@ -465,8 +465,22 @@ export default function App() {
             };
             
             // Prefer Telegram user info if available (for seamless guest login)
-            const displayName = tgUser ? `${tgUser.first_name} ${tgUser.last_name || ''}`.trim() : currentUser.displayName;
-            const photoURL = tgUser?.photo_url || currentUser.photoURL;
+            let displayName = tgUser ? `${tgUser.first_name} ${tgUser.last_name || ''}`.trim() : currentUser.displayName;
+            let photoURL = tgUser?.photo_url || currentUser.photoURL;
+            let phone = undefined;
+
+            if (tgUser) {
+              try {
+                const tgDoc = await getDoc(doc(db, 'telegram_users', tgUser.id.toString()));
+                if (tgDoc.exists()) {
+                  const data = tgDoc.data();
+                  if (data.name) displayName = data.name;
+                  if (data.phone) phone = data.phone;
+                }
+              } catch (e) {
+                console.error("Failed to fetch telegram user data", e);
+              }
+            }
 
             if (displayName) {
               payload.displayName = displayName;
@@ -474,6 +488,10 @@ export default function App() {
             } else if (currentUser.isAnonymous) {
               payload.displayName = 'Mehmon (Telegram)';
               publicPayload.displayName = 'Mehmon (Telegram)';
+            }
+            
+            if (phone) {
+              payload.phone = phone;
             }
             
             if (photoURL) {
@@ -1918,7 +1936,8 @@ function AdminTab() {
 
   const filteredUsers = users.filter(u => 
     u.email?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
+    u.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    u.phone?.includes(searchTerm)
   );
 
   return (
@@ -2012,6 +2031,7 @@ function AdminTab() {
                           </div>
                           <div>
                             <div className="font-bold text-slate-800 dark:text-slate-200">{u.displayName || 'Anonim'}</div>
+                            {u.phone && <div className="text-xs text-emerald-600 dark:text-emerald-400 font-bold tracking-wide mt-0.5">{u.phone}</div>}
                             <div className="text-xs text-slate-500 truncate max-w-[150px] md:max-w-xs">{u.email}</div>
                           </div>
                         </div>
