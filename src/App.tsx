@@ -4,7 +4,7 @@ import { Plus, Image as ImageIcon, Volume2, Search, BookOpen, Trash2, ArrowRight
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
-import { signInWithPopup, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { collection, doc, setDoc, getDoc, getDocs, onSnapshot, query, where, deleteDoc, orderBy, limit, getDocFromServer } from 'firebase/firestore';
 
 // Initialize Gemini
@@ -402,6 +402,8 @@ export default function App() {
         try {
           const userSnap = await getDoc(userRef);
           if (!userSnap.exists()) {
+            const tgUser = tg?.initDataUnsafe?.user;
+            
             const payload: any = {
               uid: currentUser.uid,
               email: currentUser.email || '',
@@ -418,13 +420,22 @@ export default function App() {
               wordsLearned: 0,
               streak: streak
             };
-            if (currentUser.displayName) {
-              payload.displayName = currentUser.displayName;
-              publicPayload.displayName = currentUser.displayName;
+            
+            // Prefer Telegram user info if available (for seamless guest login)
+            const displayName = tgUser ? `${tgUser.first_name} ${tgUser.last_name || ''}`.trim() : currentUser.displayName;
+            const photoURL = tgUser?.photo_url || currentUser.photoURL;
+
+            if (displayName) {
+              payload.displayName = displayName;
+              publicPayload.displayName = displayName;
+            } else if (currentUser.isAnonymous) {
+              payload.displayName = 'Mehmon (Telegram)';
+              publicPayload.displayName = 'Mehmon (Telegram)';
             }
-            if (currentUser.photoURL) {
-              payload.photoURL = currentUser.photoURL;
-              publicPayload.photoURL = currentUser.photoURL;
+            
+            if (photoURL) {
+              payload.photoURL = photoURL;
+              publicPayload.photoURL = photoURL;
             }
             
             await setDoc(userRef, payload);
@@ -517,11 +528,27 @@ export default function App() {
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      // Agar Telegram ichida bo'lsa, avtomatik Anonim (Mehmon) kirish qilinadi
+      if (tg) {
+        await signInAnonymously(auth);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
     } catch (error: any) {
       console.error("Login error:", error);
       if (error.code === 'auth/popup-blocked') {
-        alert("Iltimos, brauzeringizda popuplarga ruxsat bering (Allow popups).");
+        alert("Brauzeringizda popup bloki bor. Siz mehmon sifatida tizimga kiritilmoqdasiz...");
+        try {
+          await signInAnonymously(auth);
+        } catch (anonErr: any) {
+          if (anonErr.code === 'auth/operation-not-allowed') {
+            alert("Xatolik: Iltimos dasturchi bilan bog'lanib, Firebase'da Anonymous Auth yoqilganligini tekshiring.");
+          }
+        }
+      } else if (error.code === 'auth/operation-not-allowed') {
+        alert("Xatolik: Tizimga kirish turi o'chirilgan. Iltimos Firebase Console -> Authentication -> Sign-in method da yoqing.");
+      } else {
+        alert(`Tizimga kirishda xatolik: ${error.message}`);
       }
     } finally {
       setIsLoggingIn(false);
