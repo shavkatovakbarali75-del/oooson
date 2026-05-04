@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const APP_URL = process.env.APP_URL || 'https://osonsoz.vercel.app';
+const APP_URL = process.env.APP_URL || 'https://oooson.vercel.app';
 
 if (!BOT_TOKEN) {
   console.error('❌ BOT_TOKEN topilmadi! .env.local fayliga BOT_TOKEN qo\'shing.');
@@ -13,23 +13,28 @@ if (!BOT_TOKEN) {
 
 const bot = new Bot(BOT_TOKEN);
 
+// Error handler
+bot.catch((err) => {
+  console.error('Bot xatosi:', err.message);
+});
+
 // /start komandasi
 bot.command('start', async (ctx) => {
-  const userName = ctx.from?.first_name || 'do\'stim';
+  const userName = ctx.from?.first_name || "do'stim";
   
   const keyboard = new InlineKeyboard()
     .webApp("📚 Oson So'z'ni ochish", APP_URL);
 
   await ctx.reply(
     `Salom, ${userName}! 👋\n\n` +
-    `🎓 *Oson So'z* — ingliz tili so'zlarini oson va samarali yodlash platformasi\\.\n\n` +
+    `🎓 <b>Oson So'z</b> — ingliz tili so'zlarini oson va samarali yodlash platformasi.\n\n` +
     `🧠 Sun'iy intellekt yordamida so'z yarating\n` +
     `🃏 Flashkartalar bilan yodlang\n` +
     `🎮 6 xil mashq rejimida mashq qiling\n` +
     `🏆 Reytingda boshqalar bilan raqobatlashing\n\n` +
-    `Boshlash uchun quyidagi tugmani bosing\\! 👇`,
+    `Boshlash uchun quyidagi tugmani bosing! 👇`,
     {
-      parse_mode: 'MarkdownV2',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     }
   );
@@ -41,14 +46,14 @@ bot.command('help', async (ctx) => {
     .webApp("📚 Ochish", APP_URL);
 
   await ctx.reply(
-    `📖 *Oson So'z — Yordam*\n\n` +
+    `📖 <b>Oson So'z — Yordam</b>\n\n` +
     `Mavjud komandalar:\n` +
-    `/start \\- Botni boshlash\n` +
-    `/help \\- Yordam\n` +
-    `/app \\- Ilovani ochish\n\n` +
-    `Savollar uchun: @akbarali\\_dev`,
+    `/start - Botni boshlash\n` +
+    `/help - Yordam\n` +
+    `/app - Ilovani ochish\n\n` +
+    `Savollar uchun: @akbarali_shavkatov`,
     {
-      parse_mode: 'MarkdownV2',
+      parse_mode: 'HTML',
       reply_markup: keyboard,
     }
   );

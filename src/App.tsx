@@ -821,40 +821,38 @@ export default function App() {
     <div className={isDarkMode ? 'dark' : ''}>
       <div className="min-h-screen bg-slate-50 dark:bg-[#0f0f11] text-slate-900 dark:text-slate-100 font-sans selection:bg-purple-200 dark:selection:bg-purple-500/30 transition-colors duration-500">
         <header className="bg-white/80 dark:bg-[#0f0f11]/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm sticky top-0 z-20 transition-colors duration-500">
-          <div className="max-w-5xl mx-auto px-4 py-3 flex flex-col gap-3">
-            {/* Top Row */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Logo className="w-32 h-auto" />
+          <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Logo className="w-24 sm:w-32 h-auto" />
               </div>
               
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700/50">
-                  <Flame className={`w-5 h-5 ${streak > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-slate-300 dark:text-slate-600'}`} />
-                  <span className="font-bold text-slate-700 dark:text-slate-300">{streak}</span>
+              <div className="flex items-center gap-1.5 sm:gap-3">
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-slate-200 dark:border-slate-700/50">
+                  <Flame className={`w-4 h-4 ${streak > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-slate-300 dark:text-slate-600'}`} />
+                  <span className="font-bold text-sm text-slate-700 dark:text-slate-300">{streak}</span>
                 </div>
-                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700/50">
-                  <span className="text-xl">🪙</span>
-                  <span className="font-bold text-slate-700 dark:text-slate-300">{coins}</span>
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-slate-200 dark:border-slate-700/50">
+                  <span className="text-base">🪙</span>
+                  <span className="font-bold text-sm text-slate-700 dark:text-slate-300">{coins}</span>
                 </div>
 
                 <button 
                   onClick={() => setIsDarkMode(!isDarkMode)}
-                  className="p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="p-1.5 sm:p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
-                  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                  {isDarkMode ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
                 </button>
 
                 {user ? (
                   <button 
                     onClick={() => setShowProfileModal(true)}
-                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                    className="flex items-center hover:opacity-80 transition-opacity shrink-0"
                   >
-                    <div className="w-9 h-9 rounded-full p-0.5 bg-gradient-to-br from-[#a855f7] to-[#280056]">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full p-0.5 bg-gradient-to-br from-[#a855f7] to-[#280056]">
                       {userProfile?.photoURL || user.photoURL ? (
                         <img src={userProfile?.photoURL || user.photoURL || ''} alt="Profile" className="w-full h-full rounded-full object-cover bg-white dark:bg-slate-800" />
                       ) : (
-                        <div className="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-500 font-bold">
+                        <div className="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-500 font-bold text-sm">
                           {(userProfile?.displayName || user.displayName || user.email || '?').charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -864,66 +862,50 @@ export default function App() {
                   <button 
                     onClick={handleLogin}
                     disabled={isLoggingIn}
-                    className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold rounded-full shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50"
+                    className="p-1.5 sm:px-4 sm:py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold rounded-full shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 shrink-0"
                   >
                     {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCircle className="w-5 h-5" />}
                     <span className="hidden sm:inline">Kirish</span>
                   </button>
                 )}
               </div>
-            </div>
-
-            {/* Bottom Row - Tabs */}
-            <div className="flex bg-slate-100/80 dark:bg-slate-800/50 p-1.5 rounded-xl shadow-inner overflow-x-auto hide-scrollbar border border-slate-200/50 dark:border-slate-700/50">
-              <button
-                onClick={() => setActiveTab('topics')}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'topics' ? 'bg-white dark:bg-slate-700 text-purple-500 dark:text-purple-400 shadow-sm scale-[1.02]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              >
-                <Compass className="w-4 h-4" />
-                <span>Mavzular</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('list')}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'list' ? 'bg-white dark:bg-slate-700 text-cyan-500 dark:text-cyan-400 shadow-sm scale-[1.02]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              >
-                <List className="w-4 h-4" />
-                <span>Lug'at</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('study')}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'study' ? 'bg-white dark:bg-slate-700 text-lime-500 dark:text-lime-400 shadow-sm scale-[1.02]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              >
-                <Play className="w-4 h-4" />
-                <span>Yodlash</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('practice')}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'practice' ? 'bg-white dark:bg-slate-700 text-purple-500 dark:text-purple-400 shadow-sm scale-[1.02]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              >
-                <Dumbbell className="w-4 h-4" />
-                <span>Mashq</span>
-              </button>
-              <button
-                onClick={() => setActiveTab('stats')}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'stats' ? 'bg-white dark:bg-slate-700 text-cyan-500 dark:text-cyan-400 shadow-sm scale-[1.02]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              >
-                <BarChart2 className="w-4 h-4" />
-                <span>Reyting</span>
-              </button>
-              {isAdmin && (
-                <button
-                  onClick={() => setActiveTab('admin')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap ${activeTab === 'admin' ? 'bg-white dark:bg-slate-700 text-rose-500 dark:text-rose-400 shadow-sm scale-[1.02]' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
-                >
-                  <Shield className="w-4 h-4" />
-                  <span>Admin Panel</span>
-                </button>
-              )}
-            </div>
           </div>
         </header>
 
-        <main className="max-w-5xl mx-auto px-4 py-8">
+        {/* Bottom Navigation - fixed on mobile, inline on desktop */}
+        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#0f0f11]/95 backdrop-blur-md border-t border-slate-200/50 dark:border-slate-800/50 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] sm:sticky sm:top-[60px] sm:border-t-0 sm:border-b sm:border-slate-200/50 sm:dark:border-slate-800/50 sm:shadow-none">
+          <div className="max-w-5xl mx-auto px-1 sm:px-4">
+            <div className="flex items-center justify-around sm:justify-center sm:gap-1 py-1 sm:py-1.5 sm:bg-slate-100/80 sm:dark:bg-slate-800/50 sm:rounded-xl sm:my-2 sm:shadow-inner sm:border sm:border-slate-200/50 sm:dark:border-slate-700/50">
+              {[
+                { id: 'topics' as const, icon: Compass, label: 'Mavzular', activeColor: 'text-purple-500 dark:text-purple-400' },
+                { id: 'list' as const, icon: List, label: "Lug'at", activeColor: 'text-cyan-500 dark:text-cyan-400' },
+                { id: 'study' as const, icon: Play, label: 'Yodlash', activeColor: 'text-lime-500 dark:text-lime-400' },
+                { id: 'practice' as const, icon: Dumbbell, label: 'Mashq', activeColor: 'text-purple-500 dark:text-purple-400' },
+                { id: 'stats' as const, icon: BarChart2, label: 'Reyting', activeColor: 'text-cyan-500 dark:text-cyan-400' },
+                ...(isAdmin ? [{ id: 'admin' as const, icon: Shield, label: 'Admin', activeColor: 'text-rose-500 dark:text-rose-400' }] : []),
+              ].map(tab => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl sm:flex-1 transition-all min-w-0 ${
+                      isActive 
+                        ? `${tab.activeColor} sm:bg-white sm:dark:bg-slate-700 sm:shadow-sm` 
+                        : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                    }`}
+                  >
+                    <Icon className={`w-5 h-5 sm:w-4 sm:h-4 ${isActive ? '' : ''}`} />
+                    <span className={`text-[10px] sm:text-sm font-semibold leading-tight ${isActive ? 'font-bold' : ''}`}>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </nav>
+
+        <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-24 sm:pb-8">
           <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
