@@ -9,6 +9,32 @@ import { collection, doc, setDoc, getDoc, getDocs, onSnapshot, query, where, del
 
 // Initialize Gemini
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+
+// Telegram WebApp integration
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp: {
+        ready: () => void;
+        expand: () => void;
+        close: () => void;
+        initDataUnsafe: { user?: { id: number; first_name: string; last_name?: string; username?: string; photo_url?: string } };
+        themeParams: { bg_color?: string; text_color?: string; };
+        colorScheme: 'light' | 'dark';
+        isExpanded: boolean;
+        viewportHeight: number;
+        viewportStableHeight: number;
+      };
+    };
+  }
+}
+
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.ready();
+  tg.expand();
+}
 
 // Firestore connectivity test
 async function testConnection() {
@@ -579,6 +605,8 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'list' | 'study' | 'topics' | 'practice' | 'stats' | 'admin'>('topics');
   const [isDarkMode, setIsDarkMode] = useState(() => {
+    // Telegram Mini App temasini aniqlash
+    if (tg) return tg.colorScheme === 'dark';
     try { return localStorage.getItem('oson-soz-theme') === 'dark'; } catch { return false; }
   });
   const isAdmin = userProfile?.role === 'admin' || user?.email === 'shavkatovakbarali75@gmail.com';
@@ -986,7 +1014,7 @@ function TopicsTab({ words, setWords }: { words: Word[], setWords: React.Dispatc
       Return ONLY a JSON array of objects with 'original', 'translation', 'pronunciation', 'description', 'partOfSpeech', 'emoji', and 'uzbekExplanation' string properties. Do not include markdown formatting like \`\`\`json.`;
       
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: "application/json",
@@ -1262,7 +1290,7 @@ function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dis
     setIsSuggesting(true);
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: GEMINI_MODEL,
         contents: `Analyze the word "${newOriginal.trim()}". If it is misspelled, correct it. Then provide the correct spelling (original), the Uzbek translation, English pronunciation (IPA), a short English description/example, the part of speech in English (e.g., noun, verb), a single relevant emoji, and a short explanation in Uzbek of how and when to use this word (uzbekExplanation). 
         IMPORTANT: The 'uzbekExplanation' MUST be a GENERAL definition and usage guide for the word.
         Return ONLY a JSON object with 'original', 'translation', 'pronunciation', 'description', 'partOfSpeech', 'emoji', and 'uzbekExplanation' string properties. Do not include markdown formatting like \`\`\`json.`,
@@ -1568,7 +1596,7 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
     
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: GEMINI_MODEL,
         contents: `Provide a single relevant emoji for the English word "${word.original}". Return ONLY the emoji character, nothing else.`,
       });
       
@@ -1683,7 +1711,7 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
     setIsLoadingExamples(true);
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: GEMINI_MODEL,
         contents: `Find 2 short, simple example sentences for the English word "${currentWord.original}". Provide the sentences and their Uzbek translations. Format nicely.`,
         config: {
           tools: [{ googleSearch: {} }],
