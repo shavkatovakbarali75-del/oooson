@@ -2214,10 +2214,10 @@ function StatsTab({ words, stats, userProfile, streak }: { words: Word[], stats:
       </div>
 
       {/* Leaderboard Section */}
-      <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 p-6 md:p-10">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-tighter flex items-center gap-3">
-            <Users className="w-6 h-6 text-indigo-500" />
+      <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 p-4 sm:p-6 md:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-tighter flex items-center gap-2 sm:gap-3">
+            <Users className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-500" />
             Eng kuchli bilimdonlar
           </h2>
         </div>
@@ -2229,22 +2229,22 @@ function StatsTab({ words, stats, userProfile, streak }: { words: Word[], stats:
         ) : (
           <div className="space-y-3">
             {leaderboard.map((user, idx) => {
-              const userTitle = getLevelTitle(user.wordsLearned || 0); // Need to make sure wordsLearned is in public_profiles
+              const userTitle = getLevelTitle(user.wordsLearned || 0);
               return (
                 <div 
                   key={idx} 
                   id={user.uid === userProfile?.uid ? "me-in-leaderboard" : undefined}
-                  className={`flex items-center gap-4 p-4 rounded-2xl transition-all border ${
+                  className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-2xl transition-all border ${
                     user.uid === userProfile?.uid 
                       ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/30 ring-2 ring-indigo-500/10' 
                       : 'bg-slate-50 dark:bg-slate-800/30 border-slate-100 dark:border-slate-700/50 hover:border-indigo-200 dark:hover:border-indigo-500/30'
                   }`}
                 >
-                  <div className="w-10 h-10 flex items-center justify-center font-black text-lg text-slate-400">
+                  <div className="w-6 sm:w-8 flex-shrink-0 flex items-center justify-center font-black text-base sm:text-lg text-slate-400">
                     {idx + 1}
                   </div>
                   
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-200 flex-shrink-0 border-2 border-white dark:border-slate-700 shadow-sm relative">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-slate-200 flex-shrink-0 border-2 border-white dark:border-slate-700 shadow-sm relative">
                     {user.photoURL ? (
                       <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
@@ -2253,28 +2253,28 @@ function StatsTab({ words, stats, userProfile, streak }: { words: Word[], stats:
                       </div>
                     )}
                     {user.streak >= 2 && (
-                      <div className="absolute -bottom-1 -right-1 bg-orange-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white dark:border-slate-800">
-                        <Flame className="w-3 h-3 fill-white" />
+                      <div className="absolute -bottom-1 -right-1 bg-orange-500 text-white w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[8px] sm:text-[10px] font-black border-2 border-white dark:border-slate-800">
+                        <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-white" />
                       </div>
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 dark:text-slate-100 truncate flex items-center gap-2">
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate flex items-center gap-2">
                       {user.displayName || 'Anonim User'}
                       {user.uid === userProfile?.uid && (
                         <span className="text-[8px] bg-indigo-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter">Siz</span>
                       )}
                     </p>
-                    <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-black uppercase tracking-widest">{userTitle}</p>
+                    <p className="text-[9px] sm:text-[10px] text-indigo-500 dark:text-indigo-400 font-black uppercase tracking-widest truncate">{userTitle}</p>
                   </div>
 
-                  <div className="text-right">
-                    <div className="flex items-center gap-1.5 justify-end">
-                      <BookOpen className="w-4 h-4 text-indigo-500" />
-                      <p className="font-black text-slate-700 dark:text-slate-200">{user.wordsLearned || 0}</p>
+                  <div className="text-right flex-shrink-0">
+                    <div className="flex items-center gap-1 sm:gap-1.5 justify-end">
+                      <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-500" />
+                      <p className="font-black text-sm sm:text-base text-slate-700 dark:text-slate-200">{user.wordsLearned || 0}</p>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">So'zlar</p>
+                    <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">So'zlar</p>
                   </div>
                 </div>
               );
@@ -2288,11 +2288,11 @@ function StatsTab({ words, stats, userProfile, streak }: { words: Word[], stats:
                   <div className="w-1.5 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-1" />
                   <div className="w-1.5 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-1" />
                 </div>
-                <div className="flex items-center gap-4 p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 ring-2 ring-indigo-500/10">
-                  <div className="w-10 h-10 flex items-center justify-center font-black text-lg text-slate-400">
+                <div className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 ring-2 ring-indigo-500/10">
+                  <div className="w-6 sm:w-8 flex-shrink-0 flex items-center justify-center font-black text-base sm:text-lg text-slate-400">
                     ?
                   </div>
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-200 flex-shrink-0 border-2 border-white dark:border-slate-700 shadow-sm relative">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-slate-200 flex-shrink-0 border-2 border-white dark:border-slate-700 shadow-sm relative">
                     {userProfile.photoURL ? (
                       <img src={userProfile.photoURL} alt={userProfile.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
