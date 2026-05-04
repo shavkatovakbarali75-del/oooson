@@ -1406,7 +1406,7 @@ function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dis
                 type="button"
                 onClick={handleSuggest}
                 disabled={!newOriginal.trim() || isSuggesting}
-                className="px-4 py-3 bg-cyan-100 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 rounded-xl hover:bg-cyan-200 dark:hover:bg-cyan-500/30 transition-colors disabled:opacity-50 flex items-center justify-center"
+                className="w-[52px] h-[52px] shrink-0 bg-cyan-100 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 rounded-xl hover:bg-cyan-200 dark:hover:bg-cyan-500/30 transition-colors disabled:opacity-50 flex items-center justify-center"
                 title="Tarjima va ta'rifni avtomatik to'ldirish"
               >
                 {isSuggesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
@@ -2018,7 +2018,7 @@ function StatsTab({ words, stats, userProfile, streak }: { words: Word[], stats:
   const totalWords = words.length;
 
   const coins = userProfile?.coins || 0;
-  const totalTime = Object.values(stats).reduce((acc, curr) => acc + curr.timeSpent, 0);
+  const totalTime = Object.values(stats || {}).reduce((acc, curr) => acc + ((curr as any)?.timeSpent || 0), 0);
 
   const badges = [
     { id: 'novice', name: 'Boshlovchi', desc: '5 ta so\'z yodlandi', icon: Zap, color: 'text-blue-500', bg: 'bg-blue-100', threshold: 5 },
