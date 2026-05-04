@@ -1,0 +1,5 @@
+{
+  "name": "Oson So'z",
+  "description": "Oson so'z yodlash platformasi - Flashcards, Image Analysis, TTS, and Search Grounding",
+  "requestFramePermissions": ["microphone"]
+}

@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user's unique ID" },
+        "displayName": { "type": "string", "description": "The user's display name" },
+        "email": { "type": "string", "format": "email", "description": "The user's email address" },
+        "photoURL": { "type": "string", "format": "uri", "description": "The user's profile picture URL" },
+        "coins": { "type": "number", "description": "The number of coins the user has collected" },
+        "wordsLearned": { "type": "number", "description": "Total words mastered by the user" },
+        "streak": { "type": "number", "description": "The user's current activity streak in days" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "The user's role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user account was created" },
+        "lastActive": { "type": "string", "format": "date-time", "description": "When the user was last active" }
+      },
+      "required": ["uid", "email", "coins", "role", "createdAt"]
+    },
+    "Word": {
+      "title": "Word",
+      "description": "A vocabulary word saved by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique ID for the word" },
+        "userId": { "type": "string", "description": "The ID of the user who owns this word" },
+        "original": { "type": "string", "description": "The original English word" },
+        "translation": { "type": "string", "description": "The Uzbek translation" },
+        "pronunciation": { "type": "string", "description": "The English pronunciation" },
+        "description": { "type": "string", "description": "A short English description or example" },
+        "partOfSpeech": { "type": "string", "description": "The part of speech" },
+        "emoji": { "type": "string", "description": "A relevant emoji" },
+        "uzbekExplanation": { "type": "string", "description": "Explanation in Uzbek" },
+        "status": { "type": "string", "enum": ["new", "learning", "ready_for_exam", "mastered"], "description": "Learning status" },
+        "progress": { "type": "number", "description": "Learning progress percentage" },
+        "nextReview": { "type": "string", "format": "date-time", "description": "When the word should be reviewed next" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the word was added" }
+      },
+      "required": ["id", "userId", "original", "translation", "status", "progress", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles"
+    },
+    "/public_profiles/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores public profiles for leaderboard"
+    },
+    "/users/{userId}/words/{wordId}": {
+      "schema": { "$ref": "#/entities/Word" },
+      "description": "Stores vocabulary words for a specific user"
+    }
+  }
+}

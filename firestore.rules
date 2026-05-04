@@ -1,0 +1,202 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - displayName: string (optional)
+    //   - email: string (required)
+    //   - photoURL: string (optional)
+    //   - coins: number (required)
+    //   - role: string (required, immutable for non-admins)
+    //   - createdAt: timestamp (required, immutable)
+    //   - lastActive: timestamp (optional)
+    //   - bio: string (optional)
+    //
+    // Collection: public_profiles
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - coins: number (required)
+    //   - bio: string (optional)
+    //
+    // Collection: users/{userId}/words
+    // Document ID: {wordId}
+    // Fields:
+    //   - id: string (required, immutable)
+    //   - userId: string (required, immutable)
+    //   - original: string (required)
+    //   - translation: string (required)
+    //   - pronunciation: string (optional)
+    //   - description: string (optional)
+    //   - partOfSpeech: string (optional)
+    //   - emoji: string (optional)
+    //   - uzbekExplanation: string (optional)
+    //   - status: string (required)
+    //   - progress: number (required)
+    //   - nextReview: timestamp (optional)
+    //   - createdAt: timestamp (required, immutable)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() &&
+        ( (request.auth.token.email == "shavkatovakbarali75@gmail.com" && request.auth.token.email_verified == true) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') );
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+    
+    function isValidEmail(email) {
+      return email is string && email.size() > 3 && email.size() < 150;
+    }
+    
+    function isValidUrl(url) {
+      return url is string && (url == "" || url.size() < 500000);
+    }
+
+    function isPositiveOrZero(num) {
+      return num is number && num >= 0;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      let allowedFields = ['uid', 'displayName', 'email', 'photoURL', 'coins', 'xp', 'level', 'wordsLearned', 'streak', 'role', 'createdAt', 'lastActive', 'bio', 'emailVerified'];
+      return hasRequiredFields(['uid', 'email', 'coins', 'role']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 200)) &&
+             data.email is string && data.email.size() < 150 &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 1000000)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 500)) &&
+             isPositiveOrZero(data.coins) &&
+             (!('wordsLearned' in data) || isPositiveOrZero(data.wordsLearned)) &&
+             (!('streak' in data) || isPositiveOrZero(data.streak)) &&
+             data.role in ['user', 'admin'] &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('lastActive' in data) || data.lastActive is string);
+    }
+
+    function isValidPublicProfile(data) {
+      let allowedFields = ['uid', 'displayName', 'photoURL', 'coins', 'xp', 'level', 'wordsLearned', 'streak', 'bio'];
+      return hasRequiredFields(['uid', 'coins']) &&
+             data.uid is string && data.uid.size() > 0 && data.uid.size() < 100 &&
+             (!('displayName' in data) || (data.displayName is string && data.displayName.size() < 200)) &&
+             (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() < 1000000)) &&
+             (!('bio' in data) || (data.bio is string && data.bio.size() < 500)) &&
+             isPositiveOrZero(data.coins) &&
+             (!('wordsLearned' in data) || isPositiveOrZero(data.wordsLearned)) &&
+             (!('streak' in data) || isPositiveOrZero(data.streak));
+    }
+
+    function isValidWord(data) {
+      let allowedFields = ['id', 'userId', 'original', 'translation', 'pronunciation', 'description', 'partOfSpeech', 'emoji', 'uzbekExplanation', 'status', 'progress', 'nextReview', 'createdAt', 'passedQuiz', 'passedSentence', 'passedListening', 'passedSpelling', 'passedFlashcards', 'passedMatching', 'passedSpeaking', 'hiddenInAll'];
+      return data.keys().hasAll(['id', 'userId', 'original', 'translation', 'status', 'progress', 'createdAt']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.original is string && data.original.size() > 0 && data.original.size() < 1000 &&
+             data.translation is string && data.translation.size() > 0 && data.translation.size() < 1000 &&
+             (!('pronunciation' in data) || (data.pronunciation is string && data.pronunciation.size() < 500)) &&
+             (!('description' in data) || (data.description is string && data.description.size() < 5000)) &&
+             (!('partOfSpeech' in data) || (data.partOfSpeech is string && data.partOfSpeech.size() < 200)) &&
+             (!('emoji' in data) || (data.emoji is string && data.emoji.size() < 50)) &&
+             (!('uzbekExplanation' in data) || (data.uzbekExplanation is string && data.uzbekExplanation.size() < 5000)) &&
+             (!('passedQuiz' in data) || data.passedQuiz is bool) &&
+             (!('passedSentence' in data) || data.passedSentence is bool) &&
+             (!('passedListening' in data) || data.passedListening is bool) &&
+             (!('passedSpelling' in data) || data.passedSpelling is bool) &&
+             (!('passedFlashcards' in data) || data.passedFlashcards is bool) &&
+             (!('passedMatching' in data) || data.passedMatching is bool) &&
+             (!('passedSpeaking' in data) || data.passedSpeaking is bool) &&
+             (!('hiddenInAll' in data) || data.hiddenInAll is bool) &&
+             data.status in ['new', 'learning', 'ready_for_exam', 'mastered'] &&
+             isPositiveOrZero(data.progress) && data.progress <= 100 &&
+             (!('nextReview' in data) || (data.nextReview is string || data.nextReview is timestamp)) &&
+             (data.createdAt is string || data.createdAt is timestamp);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /public_profiles/{userId} {
+      allow read: if true;
+      
+      allow create: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       isValidPublicProfile(request.resource.data) && 
+                       request.resource.data.uid == userId;
+                       
+      allow update: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       isValidPublicProfile(request.resource.data) && 
+                       request.resource.data.uid == resource.data.uid;
+                       
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      allow create: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       isValidUser(request.resource.data) && 
+                       request.resource.data.uid == userId &&
+                       (request.resource.data.role == 'user' || isAdmin());
+                       
+      allow update: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       isValidUser(request.resource.data) && 
+                       request.resource.data.uid == resource.data.uid &&
+                       (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt) &&
+                       (request.resource.data.role == resource.data.role || isAdmin());
+                       
+      allow delete: if isAdmin();
+
+      match /words/{wordId} {
+        allow read: if isOwner(userId) || isAdmin();
+        
+        allow create: if isAuthenticated() && 
+                         isOwner(userId) && 
+                         isValidWord(request.resource.data) && 
+                         request.resource.data.userId == userId;
+                         
+        allow update: if isAuthenticated() && 
+                         isOwner(userId) && 
+                         isValidWord(request.resource.data) && 
+                         request.resource.data.id == resource.data.id &&
+                         request.resource.data.userId == resource.data.userId &&
+                         (!('createdAt' in resource.data) || request.resource.data.createdAt == resource.data.createdAt);
+                         
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+  }
+}
