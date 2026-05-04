@@ -36,6 +36,49 @@ if (tg) {
   tg.expand();
 }
 
+// Universal TTS Helper to support mobile/Telegram WebApp natively where speechSynthesis fails
+export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () => void, onError?: (err: any) => void) => {
+  try {
+    const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text)}`;
+    const audio = new Audio(url);
+    
+    let started = false;
+    audio.onplay = () => { started = true; onStart?.(); };
+    audio.onended = () => onEnd?.();
+    audio.onerror = (e) => {
+      console.warn("Universal TTS (Audio) failed. Falling back to speechSynthesis.", e);
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.85;
+        
+        const voices = window.speechSynthesis.getVoices();
+        const voice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha')));
+        if (voice) utterance.voice = voice;
+        
+        utterance.onstart = () => { if (!started) onStart?.(); };
+        utterance.onend = () => onEnd?.();
+        utterance.onerror = (err) => {
+          if (err.error !== 'canceled') onError?.(err);
+        };
+        window.speechSynthesis.speak(utterance);
+      } else {
+        onError?.(new Error("No TTS support"));
+      }
+    };
+    
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(e => {
+        audio.onerror?.(e);
+      });
+    }
+  } catch (err) {
+    onError?.(err);
+  }
+};
+
 // Firestore connectivity test
 async function testConnection() {
   try {
@@ -1659,58 +1702,14 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
   const playTTS = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isSpeaking) return;
-    
     setIsSpeaking(true);
     
-    // Use Browser TTS for instant feedback
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance(currentWord.original);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.85; // Slightly slower for better clarity
-      utterance.pitch = 1.1; // Slightly higher pitch for a more female-sounding voice
-      
-      // Try to find a high-quality female voice
-      const voices = window.speechSynthesis.getVoices();
-      
-      // Preferred female voices across different platforms
-      const preferredFemaleVoices = [
-        'Google US English', // Chrome/Android
-        'Microsoft Zira',    // Windows
-        'Samantha',          // macOS/iOS
-        'Victoria',          // macOS
-        'Karen',             // iOS/macOS (AU)
-        'Moira',             // macOS (IE)
-        'Tessa',             // macOS (ZA)
-        'English (United States)',
-        'en-US'
-      ];
-
-      // Find a voice that matches our preferred list and is female
-      let voice = voices.find(v => 
-        v.lang.startsWith('en') && 
-        preferredFemaleVoices.some(pv => v.name.includes(pv))
-      );
-
-      // If no preferred voice, just try to find any female-sounding one
-      if (!voice) {
-        voice = voices.find(v => 
-          v.lang.startsWith('en') && 
-          (v.name.toLowerCase().includes('female') || v.name.toLowerCase().includes('girl') || v.name.toLowerCase().includes('woman'))
-        );
-      }
-
-      if (voice) {
-        utterance.voice = voice;
-      }
-      
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    } else {
-      setIsSpeaking(false);
-    }
+    playUniversalTTS(
+      currentWord.original,
+      undefined,
+      () => setIsSpeaking(false),
+      () => setIsSpeaking(false)
+    );
   };
 
   const fetchExamples = async (e: React.MouseEvent) => {
@@ -2925,43 +2924,26 @@ function ListeningMode({ words, setWords, setStats, onBack }: any) {
     setIsGeneratingAudio(true);
     setAudioError(null);
     
-    if (!('speechSynthesis' in window)) {
-      setIsGeneratingAudio(false);
-      setAudioError("Brauzeringiz ovozli o'qishni qo'llab-quvvatlamaydi.");
-      return;
-    }
-
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 0.85;
-
-    utterance.onstart = () => {
-      setIsGeneratingAudio(false);
-      setIsPlaying(true);
-    };
-
-    utterance.onend = () => {
-      setIsPlaying(false);
-    };
-
-    utterance.onerror = (e) => {
-      console.error("Speech error:", e);
-      setIsGeneratingAudio(false);
-      setIsPlaying(false);
-      if (e.error !== 'canceled') {
-        setAudioError("Ovozni chalishda xatolik yuz berdi.");
+    playUniversalTTS(
+      text,
+      () => {
+        setIsGeneratingAudio(false);
+        setIsPlaying(true);
+      },
+      () => {
+        setIsPlaying(false);
+      },
+      (err) => {
+        console.error("Speech error:", err);
+        setIsGeneratingAudio(false);
+        setIsPlaying(false);
+        setAudioError("Ovozni chalishda xatolik yuz berdi. (Brauzeringiz qo'llab-quvvatlamaydi)");
       }
-    };
-
-    timeoutRef.current = setTimeout(() => {
-      window.speechSynthesis.speak(utterance);
-    }, 50);
+    );
   };
 
   const loadNewQuestion = (target: Word) => {
