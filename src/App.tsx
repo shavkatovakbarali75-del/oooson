@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { Plus, Image as ImageIcon, Volume2, Search, BookOpen, Trash2, ArrowRight, ArrowLeft, List, Play, Loader2, Compass, ShoppingBag, Plane, Coffee, Briefcase, GraduationCap, Trophy, Sparkles, CheckCircle2, Dumbbell, BarChart2, CheckCircle, XCircle, Timer, Award, Target, Zap, Moon, Sun, Flame, Download, Upload, Mic, UserCircle, LogOut, Edit3, Save, X, Camera, Keyboard, Layers, Link as LinkIcon, Eye, Heart, Gamepad2, Ghost, Skull, Lock, Crown, Users, PieChart, Clock, Star, Book, Shield, Bell } from 'lucide-react';
+import { Plus, Image as ImageIcon, Volume2, Search, BookOpen, Trash2, ArrowRight, ArrowLeft, List, Play, Loader2, Compass, ShoppingBag, Plane, Coffee, Briefcase, GraduationCap, Trophy, Sparkles, CheckCircle2, Dumbbell, BarChart2, CheckCircle, XCircle, Timer, Award, Target, Zap, Moon, Sun, Flame, Download, Upload, Mic, UserCircle, LogOut, Edit3, Save, X, Camera, Keyboard, Layers, Link as LinkIcon, Eye, Heart, Gamepad2, Ghost, Skull, Lock, Crown, Users, PieChart, Clock, Star, Book, Shield, Bell, LayoutGrid } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
