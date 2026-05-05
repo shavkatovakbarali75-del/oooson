@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Inter", sans-serif;
+  
+  --color-primary-400: #818CF8;
+  --color-primary-500: #6366F1;
+  --color-primary-600: #4F46E5;
+  --color-primary-800: #3730A3;
+  --color-primary-900: #312E81;
+  
+  --color-secondary-400: #7DD3FC;
+  --color-secondary-500: #38BDF8;
+  --color-secondary-600: #0284C7;
+  
+  --color-coin: #FBBF24;
+  --color-success: #22C55E;
+  --color-danger: #EF4444;
+  
+  --color-background: #F8FAFF;
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @layer utilities {
@@ -11,5 +31,15 @@
   }
   .backface-hidden {
     backface-visibility: hidden;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-slate-800 font-sans antialiased;
+  }
+  
+  .dark body {
+    @apply bg-slate-900 text-slate-100;
   }
 }

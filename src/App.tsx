@@ -37,85 +37,93 @@ if (tg) {
 }
 
 // Universal TTS Helper to support mobile/Telegram WebApp natively where speechSynthesis fails
+
 export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () => void, onError?: (err: any) => void) => {
   try {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-    const playFallbackAudio = () => {
-      // dict.youdao.com fails (HTTP 500) for sentences or long phrases.
-      // So if the text has multiple words, we MUST use Google TTS as the primary fallback.
-      const isSentence = text.trim().split(/\s+/).length > 2;
-      
-      const youdaoUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(text)}&type=2`;
-      // Use client=tw-ob on translate.google.com which is more reliable and doesn't return 0 bytes for long texts
-      const googleUrl = `https://translate.google.com/translate_tts?client=tw-ob&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text.substring(0, 200))}`;
-      
-      const primaryUrl = isSentence ? googleUrl : youdaoUrl;
-      const secondaryUrl = isSentence ? youdaoUrl : googleUrl;
-
-      const audio = new Audio(primaryUrl);
-      
-      let started = false;
-      audio.onplay = () => { started = true; onStart?.(); };
-      audio.onended = () => onEnd?.();
-      audio.onerror = (e) => onError?.(e);
-      
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((e) => {
-          console.warn(`Primary Fallback Audio TTS failed (${isSentence ? 'Google' : 'Youdao'})`, e);
-          
-          // Secondary fallback
-          const secondaryAudio = new Audio(secondaryUrl);
-          secondaryAudio.onplay = () => { started = true; onStart?.(); };
-          secondaryAudio.onended = () => onEnd?.();
-          secondaryAudio.onerror = (err) => onError?.(err);
-          const gp = secondaryAudio.play();
-          if (gp !== undefined) gp.catch(err => onError?.(err));
-        });
+    
+    // Chunk long text for Google TTS which has a ~200 char limit
+    const chunkText = (str: string, size: number) => {
+      const chunks = [];
+      let i = 0;
+      while (i < str.length) {
+        chunks.push(str.substring(i, i + size));
+        i += size;
       }
+      return chunks;
     };
 
-    // Primary: Web Speech API. 
-    // It is synchronous with user gestures (fixes iOS Safari blocks) and doesn't rely on external network.
+    const playFallbackAudio = () => {
+      const isSentence = text.trim().split(/\s+/).length > 2;
+      const chunks = chunkText(text, 180); 
+      
+      let currentChunk = 0;
+      const playNextChunk = () => {
+        if (currentChunk >= chunks.length) {
+          onEnd?.();
+          return;
+        }
+
+        const chunk = chunks[currentChunk];
+        const youdaoUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(chunk)}&type=2`;
+        const googleUrl = `https://translate.google.com/translate_tts?client=tw-ob&ie=UTF-8&tl=en-US&q=${encodeURIComponent(chunk)}`;
+        
+        const primaryUrl = isSentence ? googleUrl : youdaoUrl;
+        const audio = new Audio(primaryUrl);
+        
+        audio.onplay = () => { if (currentChunk === 0) onStart?.(); };
+        audio.onended = () => {
+          currentChunk++;
+          playNextChunk();
+        };
+        audio.onerror = (e) => {
+          console.error("Fallback TTS chunk error", e);
+          if (primaryUrl === googleUrl) {
+            const secondaryAudio = new Audio(youdaoUrl);
+            secondaryAudio.onended = () => { currentChunk++; playNextChunk(); };
+            secondaryAudio.onerror = (err) => onError?.(err);
+            secondaryAudio.play().catch(err => onError?.(err));
+          } else {
+            onError?.(e);
+          }
+        };
+        
+        audio.play().catch(e => {
+          console.warn("Audio play blocked", e);
+          onError?.(e);
+        });
+      };
+
+      playNextChunk();
+    };
+
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
-      utterance.rate = 0.85; // Slightly slower for language learners
+      utterance.rate = 0.85; 
       
       const voices = window.speechSynthesis.getVoices();
       let voice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('English')));
       if (!voice) voice = voices.find(v => v.lang.startsWith('en'));
       if (voice) utterance.voice = voice;
       
-      let started = false;
-      utterance.onstart = () => { started = true; onStart?.(); };
+      utterance.onstart = () => onStart?.();
       utterance.onend = () => onEnd?.();
       utterance.onerror = (err) => {
+        console.warn("SpeechSynthesis error", err);
         if (err.error !== 'canceled') {
           playFallbackAudio();
         }
       };
       
       window.speechSynthesis.speak(utterance);
-      
-      // Safety timeout: some Android WebViews silently fail to start SpeechSynthesis.
-      // If it doesn't start in 600ms, we cancel and try the Audio fallback.
-      // We skip this timeout check on iOS because iOS is strict about async Audio playback.
-      if (!isIOS) {
-        setTimeout(() => {
-          if (!started) {
-            window.speechSynthesis.cancel();
-            playFallbackAudio();
-          }
-        }, 600);
-      }
     } else {
       playFallbackAudio();
     }
-  } catch (err) {
-    onError?.(err);
+  } catch (error) {
+    console.error("TTS System Error:", error);
+    onError?.(error);
   }
 };
 
@@ -139,27 +147,12 @@ testConnection();
 
 function Logo({ className }: { className?: string }) {
   return (
-    <div className={className}>
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 543.76 123.87" className="w-full h-auto">
-        <defs>
-          <linearGradient id="logo-gradient" x1="395.63" y1="228.38" x2="164.78" y2="-89.36" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#a855f7"/>
-            <stop offset="1" stopColor="#280056"/>
-          </linearGradient>
-        </defs>
-        <g>
-          {/* Background Path */}
-          <path 
-            className="fill-[url(#logo-gradient)] dark:fill-white transition-colors duration-300" 
-            d="M543.76,54.5v66.26H420.89V119a69.21,69.21,0,0,1-25.83,4.87,65.88,65.88,0,0,1-39.33-12.43c-9,7.53-22.11,12.43-39.69,12.43-14.36,0-28.44-3.46-39.41-9.49a67.1,67.1,0,0,1-35,9.49c-17.57,0-33.06-6.2-44.39-16.59-11.62,10.7-27.37,16.59-44.49,16.59-17.57,0-33.06-6.2-44.38-16.59C96.71,118,81,123.87,63.84,123.87,27.44,123.87,0,97.28,0,62,0,44.71,6.6,28.89,18.59,17.49,30.32,6.34,46.46.2,64,.2,81.13.2,96.83,6,108.4,16.62,120.05,6,135.8.2,152.91.2S185.7,6,197.27,16.62C208.92,6,224.68.2,241.79.2c14.6,0,28.18,4.25,39,12.11C290,4.52,302.93,0,318.05,0c14.41,0,28.59,4.24,39.27,11.44A67.06,67.06,0,0,1,395.26.2,69.36,69.36,0,0,1,420.89,5V3.12H478.8A54.8,54.8,0,0,1,495,.7C524.16.7,543.76,22.32,543.76,54.5Z"
-          />
-          {/* Text Path */}
-          <path 
-            className="fill-white dark:fill-[url(#logo-gradient)] transition-colors duration-300" 
-            d="M495,18.71a35.23,35.23,0,0,0-26.34,11.46l-1-9H438.89v27c-5.56-18-22.16-29.88-43.62-29.88-26.75,0-46,18.3-46,43.84,0,.88,0,1.75.07,2.61C343,56,330.6,53.67,322.48,51.78,315,50,311,48.57,311,45.35c0-2.41,2.41-4.63,7.64-4.63a32.61,32.61,0,0,1,19.91,7.65l14.07-17.5C346,23.83,332.94,18,318.06,18c-19.08,0-33.17,9.24-34.32,25.57-6.78-15.48-22.33-25.37-42-25.37-22.46,0-39.67,12.91-44.61,32.17-4.82-19.32-21.9-32.17-44.26-32.17s-39.66,12.9-44.61,32.15C103.48,31,86.4,18.2,64.05,18.2,37.3,18.2,18,36.5,18,62s19.3,43.84,45.84,43.84c22.32,0,39.52-12.93,44.42-32.35,4.87,19.36,22.09,32.35,44.46,32.35S192.23,93,197.13,73.53c4.87,19.36,22.1,32.35,44.46,32.35,26.54,0,45.84-18.3,45.84-44q0-1.47-.09-2.91c5.88,8.72,17.73,11.65,27.7,14,7.44,1.81,11.66,3.62,11.66,6.63,0,2.42-2.61,4.43-8.84,4.43-9.05,0-17.7-3.42-24.94-7.44L279.85,95c8.25,6.63,21.92,10.86,36.2,10.86,22.54,0,35.64-10,37.07-25.14,6.93,15.31,22.49,25.14,41.95,25.14,21.49,0,38.23-12,43.82-30.23v27.11h31.37V61.34c0-9.25,5.43-15.48,13.67-15.48,7.24,0,10.66,5.83,10.66,13.47v43.43h31.17V54.5C525.76,31.78,513.49,18.71,495,18.71ZM64.05,77.93c-9.25,0-15.69-6.84-15.69-16.09,0-9.05,6.44-15.69,15.48-15.69S79.33,52.79,79.33,62,73.09,77.93,64.05,77.93Zm88.87,0c-9.25,0-15.69-6.84-15.69-16.09,0-9.05,6.44-15.69,15.49-15.69S168.2,52.79,168.2,62,162,77.93,152.92,77.93Zm88.87,0c-9.25,0-15.69-6.84-15.69-16.09,0-9.05,6.44-15.69,15.49-15.69S257.07,52.79,257.07,62,250.84,77.93,241.79,77.93Zm153.48,0c-9.25,0-15.69-6.84-15.69-16.09,0-9.05,6.44-15.69,15.49-15.69S410.55,52.79,410.55,62,404.32,77.93,395.27,77.93Z"
-          />
-        </g>
-      </svg>
+    <div className={`flex items-center gap-1 ${className}`}>
+      <span className="text-3xl font-[800] tracking-tighter text-primary-500">oooson</span>
+      <div className="flex gap-0.5 mt-[-10px]">
+        <div className="w-1.5 h-1.5 rounded-full bg-secondary-400 animate-pulse" />
+        <div className="w-1.5 h-1.5 rounded-full bg-coin animate-pulse delay-75" />
+      </div>
     </div>
   );
 }
@@ -731,7 +724,7 @@ export default function App() {
     });
   }, [user]);
 
-  const [activeTab, setActiveTab] = useState<'list' | 'study' | 'topics' | 'practice' | 'stats' | 'admin'>('topics');
+  const [activeTab, setActiveTab] = useState<'home' | 'list' | 'topics' | 'practice' | 'profile' | 'admin'>('home');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Telegram Mini App temasini aniqlash
     if (tg) return tg.colorScheme === 'dark';
@@ -945,42 +938,56 @@ export default function App() {
     return () => clearInterval(timer);
   }, [user]);
 
+function BackgroundBlobs() {
+  return (
+    <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary-500/10 dark:bg-primary-500/5 blur-[120px] rounded-full animate-pulse" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary-500/10 dark:bg-secondary-500/5 blur-[120px] rounded-full animate-pulse delay-700" />
+      <div className="absolute top-[20%] right-[10%] w-[30%] h-[30%] bg-pink-500/10 dark:bg-pink-500/5 blur-[120px] rounded-full animate-pulse delay-1000" />
+    </div>
+  );
+}
+
   return (
     <div className={isDarkMode ? 'dark' : ''}>
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0f0f11] text-slate-900 dark:text-slate-100 font-sans selection:bg-purple-200 dark:selection:bg-purple-500/30 transition-colors duration-500">
-        <header className="bg-white/80 dark:bg-[#0f0f11]/80 backdrop-blur-md border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm sticky top-0 z-20 transition-colors duration-500">
-          <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Logo className="w-24 sm:w-32 h-auto" />
+      <div className="min-h-screen bg-slate-50 dark:bg-[#0b0b0d] text-slate-900 dark:text-slate-100 font-sans selection:bg-primary-200 dark:selection:bg-primary-500/30 transition-colors duration-500">
+        <BackgroundBlobs />
+        
+        <header className="bg-white/70 dark:bg-[#0b0b0d]/70 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm sticky top-0 z-50 transition-colors duration-500">
+          <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 shrink-0">
+                <Logo className="w-28 sm:w-36" />
               </div>
               
-              <div className="flex items-center gap-1.5 sm:gap-3">
-                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-slate-200 dark:border-slate-700/50">
-                  <Flame className={`w-4 h-4 ${streak > 0 ? 'text-orange-500 dark:text-orange-400' : 'text-slate-300 dark:text-slate-600'}`} />
-                  <span className="font-bold text-sm text-slate-700 dark:text-slate-300">{streak}</span>
-                </div>
-                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full border border-slate-200 dark:border-slate-700/50">
-                  <span className="text-base">🪙</span>
-                  <span className="font-bold text-sm text-slate-700 dark:text-slate-300">{coins}</span>
+              <div className="flex items-center gap-2 sm:gap-4">
+                <div className="hidden sm:flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                    <Flame className={`w-4 h-4 ${streak > 0 ? 'text-orange-500' : 'text-slate-300'}`} />
+                    <span className="font-black text-sm">{streak}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                    <span className="text-lg">🪙</span>
+                    <span className="font-black text-sm">{coins}</span>
+                  </div>
                 </div>
 
                 <button 
                   onClick={() => setIsDarkMode(!isDarkMode)}
-                  className="p-1.5 sm:p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="w-10 h-10 rounded-2xl bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center transition-all active:scale-90"
                 >
-                  {isDarkMode ? <Sun className="w-4 h-4 sm:w-5 sm:h-5" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
+                  {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
 
                 {user ? (
                   <button 
                     onClick={() => setShowProfileModal(true)}
-                    className="flex items-center hover:opacity-80 transition-opacity shrink-0"
+                    className="group flex items-center shrink-0"
                   >
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full p-0.5 bg-gradient-to-br from-[#a855f7] to-[#280056]">
+                    <div className="w-10 h-10 rounded-2xl p-0.5 bg-gradient-to-br from-primary-400 to-secondary-600 group-hover:shadow-lg group-hover:shadow-primary-500/20 transition-all">
                       {userProfile?.photoURL || user.photoURL ? (
-                        <img src={userProfile?.photoURL || user.photoURL || ''} alt="Profile" className="w-full h-full rounded-full object-cover bg-white dark:bg-slate-800" />
+                        <img src={userProfile?.photoURL || user.photoURL || ''} alt="Profile" className="w-full h-full rounded-[0.85rem] object-cover bg-white dark:bg-slate-900" />
                       ) : (
-                        <div className="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-500 font-bold text-sm">
+                        <div className="w-full h-full rounded-[0.85rem] bg-white dark:bg-slate-900 flex items-center justify-center text-primary-500 font-black text-sm">
                           {(userProfile?.displayName || user.displayName || user.email || '?').charAt(0).toUpperCase()}
                         </div>
                       )}
@@ -990,67 +997,75 @@ export default function App() {
                   <button 
                     onClick={handleLogin}
                     disabled={isLoggingIn}
-                    className="p-1.5 sm:px-4 sm:py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold rounded-full shadow-sm transition-colors flex items-center gap-2 disabled:opacity-50 shrink-0"
+                    className="px-5 py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-bold rounded-2xl shadow-lg shadow-primary-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
                   >
                     {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCircle className="w-5 h-5" />}
-                    <span className="hidden sm:inline">Kirish</span>
+                    <span>Kirish</span>
                   </button>
                 )}
               </div>
           </div>
         </header>
-
-        {/* Bottom Navigation - fixed on mobile, inline on desktop */}
-        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#0f0f11]/95 backdrop-blur-md border-t border-slate-200/50 dark:border-slate-800/50 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] sm:sticky sm:top-[60px] sm:border-t-0 sm:border-b sm:border-slate-200/50 sm:dark:border-slate-800/50 sm:shadow-none">
-          <div className="max-w-5xl mx-auto px-1 sm:px-4">
-            <div className="flex items-center justify-around sm:justify-center sm:gap-1 py-1 sm:py-1.5 sm:bg-slate-100/80 sm:dark:bg-slate-800/50 sm:rounded-xl sm:my-2 sm:shadow-inner sm:border sm:border-slate-200/50 sm:dark:border-slate-700/50">
-              {[
-                { id: 'topics' as const, icon: Compass, label: 'Mavzular', activeColor: 'text-purple-500 dark:text-purple-400' },
-                { id: 'list' as const, icon: List, label: "Lug'at", activeColor: 'text-cyan-500 dark:text-cyan-400' },
-                { id: 'study' as const, icon: Play, label: 'Yodlash', activeColor: 'text-lime-500 dark:text-lime-400' },
-                { id: 'practice' as const, icon: Dumbbell, label: 'Mashq', activeColor: 'text-purple-500 dark:text-purple-400' },
-                { id: 'stats' as const, icon: BarChart2, label: 'Reyting', activeColor: 'text-cyan-500 dark:text-cyan-400' },
-                ...(isAdmin ? [{ id: 'admin' as const, icon: Shield, label: 'Admin', activeColor: 'text-rose-500 dark:text-rose-400' }] : []),
-              ].map(tab => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl sm:flex-1 transition-all min-w-0 ${
-                      isActive 
-                        ? `${tab.activeColor} sm:bg-white sm:dark:bg-slate-700 sm:shadow-sm` 
-                        : 'text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                    }`}
+        {/* Bottom Navigation */}
+        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-lg bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/20 dark:border-slate-800/50 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] sm:bottom-8">
+          <div className="flex items-center justify-between px-3 py-2">
+            {[
+              { id: 'home' as const, icon: Compass, label: 'Asosiy' },
+              { id: 'list' as const, icon: Book, label: "Lug'at" },
+              { id: 'topics' as const, icon: Sparkles, label: 'Kashfiyot' },
+              { id: 'practice' as const, icon: Zap, label: 'Mashq' },
+              { id: 'profile' as const, icon: UserCircle, label: 'Profil' },
+              ...(isAdmin ? [{ id: 'admin' as const, icon: Shield, label: 'Admin' }] : []),
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex flex-col items-center gap-1 transition-all duration-500 relative py-2 px-3 rounded-2xl ${
+                    isActive ? 'text-primary-500' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <motion.div
+                    animate={isActive ? { y: -2, scale: 1.1 } : { y: 0, scale: 1 }}
+                    className="relative z-10"
                   >
-                    <Icon className={`w-5 h-5 sm:w-4 sm:h-4 ${isActive ? '' : ''}`} />
-                    <span className={`text-[10px] sm:text-sm font-semibold leading-tight ${isActive ? 'font-bold' : ''}`}>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+                    <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5px]' : 'stroke-2'}`} />
+                  </motion.div>
+                  <span className={`text-[9px] font-black uppercase tracking-tighter transition-all duration-300 ${isActive ? 'opacity-100' : 'opacity-0 scale-90'}`}>
+                    {tab.label}
+                  </span>
+                  {isActive && (
+                    <motion.div 
+                      layoutId="nav-glow"
+                      className="absolute inset-0 bg-primary-500/10 dark:bg-primary-500/20 rounded-2xl -z-10" 
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </nav>
 
-        <main className="max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-24 sm:pb-8">
+        <main className="max-w-5xl mx-auto px-4 py-6 sm:py-10 pb-32 sm:pb-32">
           <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {activeTab === 'topics' && <TopicsTab words={words} setWords={setWords} />}
-            {activeTab === 'list' && <DictionaryTab words={words} setWords={setWords} />}
-            {activeTab === 'study' && <StudyTab words={words} setWords={setWords} />}
-            {activeTab === 'practice' && <PracticeTab words={words} setWords={setWords} setStats={setStats} setCoins={setCoins} />}
-            {activeTab === 'stats' && <StatsTab words={words} stats={stats} userProfile={userProfile} streak={streak} />}
-            {activeTab === 'admin' && isAdmin && <AdminTab />}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -10 }}
+              transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+            >
+              {activeTab === 'home' && <HomeTab words={words} userProfile={userProfile} streak={streak} coins={coins} setActiveTab={setActiveTab} />}
+              {activeTab === 'list' && <DictionaryTab words={words} setWords={setWords} />}
+              {activeTab === 'topics' && <TopicsTab words={words} setWords={setWords} />}
+              {activeTab === 'practice' && <PracticeTab words={words} setWords={setWords} setStats={setStats} setCoins={setCoins} />}
+              {activeTab === 'profile' && <ProfileTab words={words} stats={stats} userProfile={userProfile} streak={streak} user={user!} onEditProfile={() => setShowProfileModal(true)} />}
+              {activeTab === 'admin' && isAdmin && <AdminTab />}
+            </motion.div>
+          </AnimatePresence>
+        </main>
 
       {showProfileModal && user && (
         <ProfileModal 
@@ -1086,26 +1101,174 @@ export default function App() {
   );
 }
 
+function HomeTab({ words, userProfile, streak, coins, setActiveTab }: { words: Word[], userProfile: UserProfile | null, streak: number, coins: number, setActiveTab: (tab: any) => void }) {
+  const learnedToday = useMemo(() => {
+    const today = getLocalDate();
+    return words.filter(w => w.status === 'learned' && w.createdAt?.startsWith(today)).length;
+  }, [words]);
+  
+  const dailyGoal = 5;
+  const progress = Math.min(100, (learnedToday / dailyGoal) * 100);
+
+  const wordOfTheDay = useMemo(() => {
+    if (words.length === 0) return null;
+    const seed = new Date().toDateString();
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % words.length;
+    return words[index];
+  }, [words]);
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 6) return "Xayrli tun";
+    if (hour < 12) return "Xayrli tong";
+    if (hour < 18) return "Xayrli kun";
+    return "Xayrli kech";
+  }, []);
+
+  return (
+    <div className="space-y-8 pb-12">
+      <header className="flex items-center justify-between px-1">
+        <div>
+          <p className="text-xs font-black text-primary-500 uppercase tracking-[0.2em] mb-1">{greeting}</p>
+          <h1 className="text-3xl font-black text-slate-800 dark:text-white">
+            {userProfile?.displayName?.split(' ')[0] || 'Do\'stim'} <span className="inline-block animate-bounce">👋</span>
+          </h1>
+        </div>
+        <button className="relative w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-500 hover:text-primary-500 transition-colors group">
+          <Bell className="w-6 h-6 group-hover:rotate-12 transition-transform" />
+          <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-rose-500 border-2 border-white dark:border-slate-800 rounded-full" />
+        </button>
+      </header>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-gradient-to-br from-orange-400 to-rose-500 p-0.5 rounded-[2rem] shadow-lg shadow-orange-500/20 group transition-all hover:scale-[1.02]">
+          <div className="bg-white dark:bg-slate-900 rounded-[1.9rem] p-5 flex items-center gap-4 h-full">
+            <div className="w-12 h-12 rounded-2xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
+              <Flame className="w-6 h-6 text-orange-500 animate-pulse" />
+            </div>
+            <div>
+              <p className="text-xl font-black text-slate-800 dark:text-white leading-none">{streak}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Kunlik seriya</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-gradient-to-br from-amber-400 to-yellow-600 p-0.5 rounded-[2rem] shadow-lg shadow-amber-500/20 group transition-all hover:scale-[1.02]">
+          <div className="bg-white dark:bg-slate-900 rounded-[1.9rem] p-5 flex items-center gap-4 h-full">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center text-2xl">
+              🪙
+            </div>
+            <div>
+              <p className="text-xl font-black text-slate-800 dark:text-white leading-none">{coins}</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Jami tangalar</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none relative overflow-hidden group">
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="text-[10px] font-black text-primary-500 uppercase tracking-[0.2em] mb-1">Kunlik progress</p>
+              <h2 className="text-2xl font-black text-slate-800 dark:text-white">
+                {learnedToday} / {dailyGoal} <span className="text-slate-400 font-bold text-lg">so'z</span>
+              </h2>
+            </div>
+            <div className="w-14 h-14 rounded-2xl bg-primary-50 dark:bg-primary-500/10 flex items-center justify-center">
+              <Target className="w-7 h-7 text-primary-500" />
+            </div>
+          </div>
+          
+          <div className="relative h-4 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden mb-8">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary-400 to-secondary-500 rounded-full shadow-[0_0_20px_rgba(var(--primary-500),0.3)]"
+            />
+          </div>
+
+          <button 
+            onClick={() => setActiveTab('practice')}
+            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl transition-all active:scale-[0.98] hover:shadow-primary-500/20 flex items-center justify-center gap-3 group"
+          >
+            Mashqni boshlash
+            <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
+        <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-primary-500/5 rounded-full blur-3xl pointer-events-none" />
+      </div>
+
+      {wordOfTheDay && (
+        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[3rem] p-8 text-white shadow-2xl shadow-indigo-500/30">
+          <div className="relative z-10 flex flex-col items-center text-center">
+            <p className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.3em] mb-4">Kun so'zi</p>
+            <span className="text-5xl mb-4">{wordOfTheDay.emoji || '📖'}</span>
+            <h3 className="text-4xl font-black mb-1">{wordOfTheDay.original}</h3>
+            <p className="text-lg text-indigo-100 font-medium opacity-80 mb-6 italic">{wordOfTheDay.translation}</p>
+            
+            <div className="w-full p-4 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 text-sm text-left">
+              <p className="font-bold text-indigo-200 mb-1">Ta'rif:</p>
+              <p className="line-clamp-2">{wordOfTheDay.description || "Ushbu so'z uchun hali ta'rif qo'shilmagan."}</p>
+            </div>
+          </div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-400/20 rounded-full blur-2xl" />
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-xl font-black text-slate-800 dark:text-white">Tezkor amallar</h3>
+          <button className="text-xs font-bold text-primary-500">Hammasi</button>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {[
+            { id: 'list', name: 'Lug\'at', icon: Book, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+            { id: 'topics', name: 'Kashfiyot', icon: Sparkles, color: 'text-secondary-500', bg: 'bg-secondary-50 dark:bg-secondary-500/10' },
+            { id: 'practice', name: 'Tezkor Quiz', icon: Zap, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10' },
+            { id: 'practice', name: 'Flashcards', icon: LayoutGrid, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+          ].map((action, i) => (
+            <button 
+              key={i}
+              onClick={() => setActiveTab(action.id as any)}
+              className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all active:scale-95 flex flex-col items-center gap-4 group"
+            >
+              <div className={`w-16 h-16 rounded-[1.5rem] ${action.bg} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                <action.icon className={`w-8 h-8 ${action.color}`} />
+              </div>
+              <span className="font-black text-slate-700 dark:text-slate-200">{action.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TopicsTab({ words, setWords }: { words: Word[], setWords: React.Dispatch<React.SetStateAction<Word[]>> }) {
   const TOPICS = [
-    { id: 'shopping', name: 'Xaridlar', icon: ShoppingBag, color: 'bg-pink-100 text-pink-600', border: 'border-pink-200' },
-    { id: 'travel', name: 'Sayohat', icon: Plane, color: 'bg-sky-100 text-sky-600', border: 'border-sky-200' },
-    { id: 'food', name: 'Ovqat', icon: Coffee, color: 'bg-amber-100 text-amber-600', border: 'border-amber-200' },
-    { id: 'business', name: 'Biznes', icon: Briefcase, color: 'bg-emerald-100 text-emerald-600', border: 'border-emerald-200' },
-    { id: 'education', name: 'Ta\'lim', icon: GraduationCap, color: 'bg-indigo-100 text-indigo-600', border: 'border-indigo-200' },
-    { id: 'sports', name: 'Sport', icon: Trophy, color: 'bg-orange-100 text-orange-600', border: 'border-orange-200' },
+    { id: 'shopping', name: 'Xaridlar', icon: ShoppingBag, color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-500/10', border: 'border-pink-100', gradient: 'from-pink-500 to-rose-500' },
+    { id: 'travel', name: 'Sayohat', icon: Plane, color: 'text-sky-500', bg: 'bg-sky-50 dark:bg-sky-500/10', border: 'border-sky-100', gradient: 'from-sky-500 to-blue-500' },
+    { id: 'food', name: 'Ovqat', icon: Coffee, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-100', gradient: 'from-amber-500 to-orange-500' },
+    { id: 'business', name: 'Biznes', icon: Briefcase, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10', border: 'border-emerald-100', gradient: 'from-emerald-500 to-teal-500' },
+    { id: 'education', name: 'Ta\'lim', icon: GraduationCap, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-500/10', border: 'border-indigo-100', gradient: 'from-indigo-500 to-purple-500' },
+    { id: 'sports', name: 'Sport', icon: Trophy, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-500/10', border: 'border-orange-100', gradient: 'from-orange-500 to-red-500' },
   ];
 
   const LEVELS = [
-    { id: 'A1-A2', name: 'Boshlang\'ich (A1-A2)', desc: 'Eng ko\'p ishlatiladigan oddiy so\'zlar' },
-    { id: 'B1-B2', name: 'O\'rta (B1-B2)', desc: 'Kundalik muloqot uchun kerakli so\'zlar' },
-    { id: 'C1-C2', name: 'Murakkab (C1-C2)', desc: 'Murakkab va professional atamalar' },
+    { id: 'A1-A2', name: 'Boshlang\'ich', desc: 'Eng ko\'p ishlatiladigan oddiy so\'zlar', icon: '🌱' },
+    { id: 'B1-B2', name: 'O\'rta', desc: 'Kundalik muloqot uchun kerakli so\'zlar', icon: '🌿' },
+    { id: 'C1-C2', name: 'Murakkab', desc: 'Professional darajadagi atamalar', icon: '🌳' },
   ];
 
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
   const [customTopic, setCustomTopic] = useState<string>('');
   const [selectedLevel, setSelectedLevel] = useState<string>('A1-A2');
-  const [generatedWords, setGeneratedWords] = useState<{original: string, translation: string, pronunciation?: string, description?: string, partOfSpeech?: string, emoji?: string, uzbekExplanation?: string}[]>([]);
+  const [generatedWords, setGeneratedWords] = useState<any[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [addedWords, setAddedWords] = useState<Set<string>>(new Set());
 
@@ -1119,245 +1282,201 @@ function TopicsTab({ words, setWords }: { words: Word[], setWords: React.Dispatc
 
     try {
       const prompt = `Generate 10 English vocabulary words related to the topic "${activeTopic}" at the "${selectedLevel}" difficulty level. Provide the Uzbek translation, the English pronunciation (phonetic spelling or IPA), a short description or example sentence in English, the part of speech in English (e.g., noun, verb, adj), a single relevant emoji, and a short explanation in Uzbek of how and when to use this word (uzbekExplanation). 
-      IMPORTANT: The 'uzbekExplanation' MUST be a GENERAL definition and usage guide for the word, NOT specific to the topic "${activeTopic}". For example, if the topic is "strong men" and the word is "calm", the explanation should be about being calm in general, not just about calm men.
-      IMPORTANT: Randomize your selection! Do not return the most common words every time. Pick different words to ensure variety if asked multiple times.
       Return ONLY a JSON array of objects with 'original', 'translation', 'pronunciation', 'description', 'partOfSpeech', 'emoji', and 'uzbekExplanation' string properties. Do not include markdown formatting like \`\`\`json.`;
       
       const response = await ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-        }
+        config: { responseMimeType: "application/json" }
       });
 
-      if (!response.text) {
-        throw new Error("No text returned from model");
-      }
-
-      let jsonText = response.text.trim();
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/```json\n?/g, '').replace(/```/g, '').trim();
-      }
-
-      const newWords = JSON.parse(jsonText);
+      if (!response.text) throw new Error("No text returned");
+      const newWords = JSON.parse(response.text.trim());
       if (Array.isArray(newWords)) {
         setGeneratedWords(newWords);
-      } else {
-        throw new Error("Generated content is not an array");
       }
-    } catch (error: any) {
-      console.error("Error generating words:", error);
-      if (error?.message?.includes("permission denied") || error?.message?.includes("403")) {
-        alert("Sun'iy intellektga ulanishda xatolik: Ruxsat etilmadi. Agar siz ushbu ilovaga ulashilgan ssilka orqali kirgan bo'lsangiz, iltimos Google akkauntingiz orqali tizimga kiring (Sign in).");
-      } else {
-        alert("So'zlarni yaratishda xatolik yuz berdi. Iltimos qayta urinib ko'ring.");
-      }
+    } catch (error) {
+      console.error(error);
+      alert("Xatolik yuz berdi. Qayta urinib ko'ring.");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleAddWord = (word: {original: string, translation: string, pronunciation?: string, description?: string, partOfSpeech?: string, emoji?: string, uzbekExplanation?: string}) => {
+  const handleAddWord = (word: any) => {
     const newId = Date.now().toString() + Math.random().toString(36).substring(7);
-    setWords(prev => [{
-      id: newId,
-      original: word.original,
-      translation: word.translation,
-      pronunciation: word.pronunciation,
-      description: word.description,
-      partOfSpeech: word.partOfSpeech,
-      emoji: word.emoji,
-      uzbekExplanation: word.uzbekExplanation,
-      status: 'new',
-      progress: 0,
-      createdAt: new Date().toISOString()
-    }, ...prev]);
+    setWords(prev => [{ ...word, id: newId, status: 'new', progress: 0, createdAt: new Date().toISOString() }, ...prev]);
     setAddedWords(prev => new Set(prev).add(word.original));
   };
 
   const handleAddAll = () => {
     const wordsToAdd = generatedWords.filter(w => !addedWords.has(w.original));
     if (wordsToAdd.length === 0) return;
-
-    const newEntries = wordsToAdd.map(w => ({
-      id: Date.now().toString() + Math.random().toString(36).substring(7),
-      original: w.original,
-      translation: w.translation,
-      pronunciation: w.pronunciation,
-      description: w.description,
-      partOfSpeech: w.partOfSpeech,
-      emoji: w.emoji,
-      uzbekExplanation: w.uzbekExplanation,
-      status: 'new' as const,
-      progress: 0,
-      createdAt: new Date().toISOString()
-    }));
-
+    const newEntries = wordsToAdd.map(w => ({ ...w, id: Date.now().toString() + Math.random().toString(36).substring(7), status: 'new' as const, progress: 0, createdAt: new Date().toISOString() }));
     setWords(prev => [...newEntries, ...prev]);
     setAddedWords(new Set(generatedWords.map(w => w.original)));
   };
 
   return (
-    <div className="space-y-8">
-      <div className="text-center max-w-2xl mx-auto mb-8">
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-4">Yangi so'zlarni kashf qiling</h2>
-        <p className="text-slate-600 dark:text-slate-400">Qiziqqan mavzuyingizni va darajangizni tanlang. Sun'iy intellekt siz uchun maxsus so'zlar ro'yxatini tuzib beradi.</p>
-      </div>
+    <div className="space-y-8 pb-12">
+      <header className="px-1">
+        <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-2">Kashfiyot Hubi</h2>
+        <p className="text-slate-500 font-medium">AI yordamida har qanday mavzuda so'zlar kashf qiling.</p>
+      </header>
 
-      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-6 md:p-8 rounded-3xl shadow-xl shadow-purple-100/50 dark:shadow-none border border-white dark:border-slate-700">
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">1. Mavzuni tanlang yoki yozing</h3>
-        <div className="mb-6">
-          <input
-            type="text"
-            placeholder="O'zingiz xohlagan mavzuni yozing (masalan: Kosmos, Texnologiya...)"
-            value={customTopic}
-            onChange={(e) => {
-              setCustomTopic(e.target.value);
-              if (e.target.value) setSelectedTopic(null);
-            }}
-            className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 rounded-2xl focus:ring-4 focus:ring-indigo-500/20 dark:focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition-all font-medium text-slate-700 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
-          />
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-          {TOPICS.map(topic => {
-            const Icon = topic.icon;
-            const isSelected = selectedTopic === topic.id && !customTopic;
-            return (
-              <button
-                key={topic.id}
-                onClick={() => {
-                  setSelectedTopic(topic.id);
-                  setCustomTopic('');
-                }}
-                className={`p-4 rounded-2xl border-2 transition-all duration-200 flex flex-col items-center gap-3 ${
-                  isSelected 
-                    ? `border-purple-500 bg-purple-50 dark:bg-purple-900/30 shadow-md scale-[1.02]` 
-                    : `border-transparent bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 hover:scale-[1.02]`
-                }`}
-              >
-                <div className={`p-3 rounded-xl ${topic.color}`}>
-                  <Icon className="w-6 h-6" />
-                </div>
-                <span className={`font-semibold ${isSelected ? 'text-purple-700 dark:text-purple-400' : 'text-slate-700 dark:text-slate-300'}`}>{topic.name}</span>
-              </button>
-            );
-          })}
-        </div>
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-4 ml-1">Mashhur mavzular</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {TOPICS.map((topic) => (
+                <button
+                  key={topic.id}
+                  onClick={() => { setSelectedTopic(topic.id); setCustomTopic(''); }}
+                  className={`relative p-5 rounded-[2rem] border-2 transition-all flex flex-col items-center gap-4 group overflow-hidden ${
+                    selectedTopic === topic.id 
+                      ? 'border-primary-500 bg-primary-50/30 dark:bg-primary-500/10' 
+                      : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 hover:border-slate-200 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 ${topic.bg} ${topic.color}`}>
+                    <topic.icon className="w-7 h-7" />
+                  </div>
+                  <span className="font-black text-slate-700 dark:text-slate-200">{topic.name}</span>
+                  {selectedTopic === topic.id && (
+                    <motion.div layoutId="topic-active" className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary-500" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">2. Darajani tanlang</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {LEVELS.map(level => (
-            <button
-              key={level.id}
-              onClick={() => setSelectedLevel(level.id)}
-              className={`p-4 rounded-2xl border-2 text-left transition-all duration-200 ${
-                selectedLevel === level.id 
-                  ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 shadow-md scale-[1.02]' 
-                  : 'border-transparent bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 hover:scale-[1.02]'
-              }`}
-            >
-              <div className={`font-bold mb-1 ${selectedLevel === level.id ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-100'}`}>{level.name}</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400">{level.desc}</div>
-            </button>
-          ))}
-        </div>
+          <div className="relative">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-4 ml-1">Yoki o'z mavzungiz</h3>
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
+                <Search className="w-5 h-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+              </div>
+              <input
+                type="text"
+                placeholder="Masalan: 'Kosmos', 'Tibbiyot', 'Kriptovalyuta'..."
+                value={customTopic}
+                onChange={(e) => { setCustomTopic(e.target.value); setSelectedTopic(null); }}
+                className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-3xl text-sm font-bold focus:border-primary-500 outline-none transition-all placeholder:text-slate-400"
+              />
+            </div>
+          </div>
 
-        <button
-          onClick={handleGenerate}
-          disabled={(!selectedTopic && !customTopic.trim()) || isGenerating}
-          className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-lg shadow-lg shadow-indigo-200 hover:shadow-xl hover:scale-[1.01] transition-all active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="w-6 h-6 animate-spin" />
-              So'zlar tayyorlanmoqda...
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-6 h-6" />
-              So'zlarni yaratish
-            </>
-          )}
-        </button>
+          <div>
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-4 ml-1">Qiyinchilik darajasi</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {LEVELS.map((level) => (
+                <button
+                  key={level.id}
+                  onClick={() => setSelectedLevel(level.id)}
+                  className={`p-4 rounded-2xl border-2 transition-all text-left flex items-center gap-4 ${
+                    selectedLevel === level.id 
+                      ? 'border-primary-500 bg-primary-50/30 dark:bg-primary-500/10' 
+                      : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50'
+                  }`}
+                >
+                  <span className="text-2xl">{level.icon}</span>
+                  <div>
+                    <p className="text-sm font-black text-slate-800 dark:text-white leading-tight">{level.name}</p>
+                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">{level.id}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating || (!selectedTopic && !customTopic.trim())}
+            className="w-full py-5 bg-primary-500 hover:bg-primary-600 text-white font-black rounded-2xl shadow-xl shadow-primary-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
+          >
+            {isGenerating ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
+            {isGenerating ? "AI kashf qilmoqda..." : "Yangi so'zlarni kashf qilish"}
+          </button>
+        </div>
       </div>
 
       {generatedWords.length > 0 && (
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-6 md:p-8 rounded-3xl shadow-xl shadow-purple-100/50 dark:shadow-none border border-white dark:border-slate-700"
-        >
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div className="space-y-6">
+          <div className="flex items-center justify-between px-2">
             <div>
-              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Tavsiya etilgan so'zlar</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Ushbu so'zlarni lug'atingizga qo'shing va yodlashni boshlang.</p>
+              <h3 className="text-xl font-black text-slate-800 dark:text-white">Natijalar</h3>
+              <p className="text-xs text-slate-400 font-bold">AI siz uchun 10 ta so'z tanladi</p>
             </div>
-            <button
-              onClick={handleAddAll}
-              disabled={addedWords.size === generatedWords.length}
-              className="px-4 py-2 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 font-semibold rounded-xl hover:bg-indigo-200 dark:hover:bg-indigo-800/50 transition-colors disabled:opacity-50 flex items-center gap-2"
+            <button 
+              onClick={handleAddAll} 
+              className="px-5 py-2.5 bg-emerald-500 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
             >
-              <Plus className="w-4 h-4" />
-              Barchasini qo'shish
+              Hammasini qo'shish
             </button>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {generatedWords.map((word, idx) => {
-              const isAdded = addedWords.has(word.original);
-              return (
-                <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-2xl border border-slate-100 dark:border-slate-600 hover:border-indigo-100 dark:hover:border-indigo-500/50 transition-colors">
-                  <div className="flex items-start gap-3">
-                    {word.emoji && <div className="text-2xl mt-0.5 shrink-0">{word.emoji}</div>}
-                    <div>
-                      <div className="font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2 flex-wrap">
-                        {word.original}
-                        {word.partOfSpeech && <span className="text-xs font-semibold text-indigo-500 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-md italic">{word.partOfSpeech}</span>}
-                        {word.pronunciation && <span className="text-sm font-normal text-slate-400 dark:text-slate-500">[{word.pronunciation}]</span>}
-                      </div>
-                      <div className="text-slate-600 dark:text-slate-300 font-medium">{word.translation}</div>
-                      {word.description && <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-1">{word.description}</div>}
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <AnimatePresence>
+              {generatedWords.map((word, idx) => (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  key={idx} 
+                  className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-4 group hover:shadow-xl transition-all"
+                >
+                  <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">
+                    {word.emoji}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-black text-slate-800 dark:text-white truncate text-lg">{word.original}</span>
+                      <span className="text-[9px] font-black text-primary-500 uppercase bg-primary-50 dark:bg-primary-500/10 px-2 py-0.5 rounded italic">
+                        {word.partOfSpeech}
+                      </span>
                     </div>
+                    <p className="text-sm font-bold text-slate-400 truncate">{word.translation}</p>
                   </div>
                   <button
                     onClick={() => handleAddWord(word)}
-                    disabled={isAdded}
-                    className={`p-2.5 rounded-xl transition-all ${
-                      isAdded 
-                        ? 'bg-[#a855f7]/20 dark:bg-[#a855f7]/10 text-[#280056] dark:text-[#a855f7]' 
-                        : 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200 dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-700'
+                    disabled={addedWords.has(word.original)}
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                      addedWords.has(word.original) 
+                        ? 'bg-emerald-50 text-emerald-500' 
+                        : 'bg-slate-50 dark:bg-slate-900 text-slate-400 hover:bg-primary-500 hover:text-white'
                     }`}
                   >
-                    {isAdded ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                    {addedWords.has(word.original) ? <CheckCircle2 className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
                   </button>
-                </div>
-              );
-            })}
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
-        </motion.div>
+        </div>
       )}
     </div>
   );
 }
 
+
 function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dispatch<React.SetStateAction<Word[]>> }) {
   const [newOriginal, setNewOriginal] = useState('');
   const [newTranslation, setNewTranslation] = useState('');
   const [newPronunciation, setNewPronunciation] = useState('');
-  const [newDescription, setNewDescription] = useState('');
   const [newPartOfSpeech, setNewPartOfSpeech] = useState('');
   const [newEmoji, setNewEmoji] = useState('');
+  const [newDescription, setNewDescription] = useState('');
   const [newUzbekExplanation, setNewUzbekExplanation] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'new' | 'learning' | 'ready_for_exam' | 'mastered'>('all');
+  const [filter, setFilter] = useState<'all' | 'new' | 'learning' | 'mastered'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const handleExport = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(words));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
     downloadAnchorNode.setAttribute("download", "oson-soz-lugat.json");
-    document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
   };
@@ -1368,316 +1487,207 @@ function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dis
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const importedWords = JSON.parse(event.target?.result as string);
-        if (Array.isArray(importedWords)) {
+        const imported = JSON.parse(event.target?.result as string);
+        if (Array.isArray(imported)) {
           setWords(prev => {
-            const newWords = [...prev];
-            importedWords.forEach(iw => {
-              if (iw.original && !newWords.find(w => w.original.toLowerCase() === iw.original.toLowerCase())) {
-                newWords.push({
-                  ...iw, 
-                  id: Date.now().toString() + Math.random().toString(36).substring(7),
-                  status: iw.status || 'new',
-                  progress: iw.progress || 0
-                });
+            const existing = new Set(prev.map(w => w.original.toLowerCase()));
+            const next = [...prev];
+            imported.forEach(iw => {
+              if (iw.original && !existing.has(iw.original.toLowerCase())) {
+                next.push({ ...iw, id: Date.now().toString() + Math.random().toString(36).substring(7), status: iw.status || 'new', progress: iw.progress || 0 });
               }
             });
-            return newWords;
+            return next;
           });
-          alert("Lug'at muvaffaqiyatli yuklandi!");
+          alert("Lug'at yuklandi!");
         }
-      } catch (err) {
-        alert("Faylni o'qishda xatolik yuz berdi. Iltimos, to'g'ri JSON fayl tanlang.");
-      }
+      } catch (err) { alert("Xatolik!"); }
     };
     reader.readAsText(file);
-    // Reset input
     e.target.value = '';
   };
 
-    const handleSuggest = async () => {
+  const handleSuggest = async () => {
     if (!newOriginal.trim()) return;
     setIsSuggesting(true);
     try {
       const response = await ai.models.generateContent({
         model: GEMINI_MODEL,
-        contents: `Analyze the word "${newOriginal.trim()}". If it is misspelled, correct it. Then provide the correct spelling (original), the Uzbek translation, English pronunciation (IPA), a short English description/example, the part of speech in English (e.g., noun, verb), a single relevant emoji, and a short explanation in Uzbek of how and when to use this word (uzbekExplanation). 
-        IMPORTANT: The 'uzbekExplanation' MUST be a GENERAL definition and usage guide for the word.
-        Return ONLY a JSON object with 'original', 'translation', 'pronunciation', 'description', 'partOfSpeech', 'emoji', and 'uzbekExplanation' string properties. Do not include markdown formatting like \`\`\`json.`,
-        config: {
-          responseMimeType: "application/json",
-        }
+        contents: `Analyze the word "${newOriginal.trim()}". Return JSON with 'original', 'translation', 'pronunciation', 'description', 'partOfSpeech', 'emoji', and 'uzbekExplanation'.`,
+        config: { responseMimeType: "application/json" }
       });
-      
-      if (!response.text) {
-        throw new Error("No text returned from model");
-      }
-
-      let jsonText = response.text.trim();
-      if (jsonText.startsWith('```json')) {
-        jsonText = jsonText.replace(/```json\n?/g, '').replace(/```/g, '').trim();
-      }
-      const data = JSON.parse(jsonText);
-      
-      if (data && typeof data === 'object') {
-        if (data.original) setNewOriginal(data.original);
-        if (data.translation) setNewTranslation(data.translation);
-        if (data.pronunciation) setNewPronunciation(data.pronunciation);
-        if (data.description) setNewDescription(data.description);
-        if (data.partOfSpeech) setNewPartOfSpeech(data.partOfSpeech);
-        if (data.emoji) setNewEmoji(data.emoji);
-        if (data.uzbekExplanation) setNewUzbekExplanation(data.uzbekExplanation);
-      } else {
-        throw new Error("Parsed data is not an object");
-      }
-    } catch (error: any) {
-      console.error("Error suggesting word details:", error);
-      if (error?.message?.includes("permission denied") || error?.message?.includes("403")) {
-        alert("Sun'iy intellektga ulanishda xatolik: Ruxsat etilmadi. Iltimos Google akkauntingiz orqali tizimga kiring (Sign in).");
-      }
-    } finally {
-      setIsSuggesting(false);
-    }
+      if (!response.text) throw new Error("No text");
+      const data = JSON.parse(response.text.trim());
+      setNewOriginal(data.original || newOriginal);
+      setNewTranslation(data.translation || '');
+      setNewPronunciation(data.pronunciation || '');
+      setNewPartOfSpeech(data.partOfSpeech || '');
+      setNewEmoji(data.emoji || '');
+      setNewDescription(data.description || '');
+      setNewUzbekExplanation(data.uzbekExplanation || '');
+    } catch (error) { console.error(error); }
+    finally { setIsSuggesting(false); }
   };
 
   const handleAddWord = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newOriginal.trim() || !newTranslation.trim()) return;
-    
     const newId = Date.now().toString() + Math.random().toString(36).substring(7);
     setWords(prev => [{
-      id: newId,
-      original: newOriginal.trim(),
-      translation: newTranslation.trim(),
-      pronunciation: newPronunciation.trim() || undefined,
-      description: newDescription.trim() || undefined,
-      partOfSpeech: newPartOfSpeech.trim() || undefined,
-      emoji: newEmoji.trim() || undefined,
-      uzbekExplanation: newUzbekExplanation.trim() || undefined,
-      status: 'new',
-      progress: 0,
-      createdAt: new Date().toISOString()
+      id: newId, original: newOriginal.trim(), translation: newTranslation.trim(), pronunciation: newPronunciation.trim(),
+      description: newDescription.trim(), partOfSpeech: newPartOfSpeech.trim(), emoji: newEmoji.trim(),
+      uzbekExplanation: newUzbekExplanation.trim(), status: 'new', progress: 0, createdAt: new Date().toISOString()
     }, ...prev]);
-    
-    setNewOriginal('');
-    setNewTranslation('');
-    setNewPronunciation('');
-    setNewDescription('');
-    setNewPartOfSpeech('');
-    setNewEmoji('');
-    setNewUzbekExplanation('');
+    setNewOriginal(''); setNewTranslation(''); setNewPronunciation(''); setNewPartOfSpeech(''); setNewEmoji(''); setNewDescription(''); setNewUzbekExplanation('');
   };
 
-  const handleDelete = (id: string) => {
-    setWords(prev => {
-      return prev.map(w => {
-        if (w.id === id) {
-          if (filter === 'all') {
-            if (w.status === 'mastered') {
-              return { ...w, hiddenInAll: true };
-            }
-            return null;
-          } else if (filter === 'mastered') {
-            return { ...w, status: 'new', progress: 0, hiddenInAll: false };
-          } else {
-            return null;
-          }
-        }
-        return w;
-      }).filter(Boolean) as Word[];
-    });
-  };
+  const handleDelete = (id: string) => setWords(prev => prev.filter(w => w.id !== id));
 
-  const filteredWords = words.filter(w => {
-    if (filter === 'all') return !w.hiddenInAll;
-    return w.status === filter;
-  });
+  const filteredWords = words
+    .filter(w => filter === 'all' ? true : w.status === filter)
+    .filter(w => w.original.toLowerCase().includes(searchQuery.toLowerCase()) || w.translation.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Mening Lug'atim</h2>
+    <div className="space-y-8 pb-24">
+      <header className="px-1 flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-2">Mening Lug'atim</h2>
+          <p className="text-slate-500 font-medium">{words.length} ta so'z mavjud</p>
+        </div>
         <div className="flex gap-2">
-          <label className="cursor-pointer px-4 py-2 bg-white dark:bg-slate-800 text-cyan-600 dark:text-cyan-400 font-semibold rounded-xl hover:bg-cyan-50 dark:hover:bg-slate-700 transition-colors border border-cyan-100 dark:border-slate-700 flex items-center gap-2 shadow-sm">
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">Yuklash</span>
+          <label className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-400 hover:text-primary-500 transition-all cursor-pointer">
+            <Upload className="w-5 h-5" />
             <input type="file" accept=".json" onChange={handleImport} className="hidden" />
           </label>
-          <button 
-            onClick={handleExport}
-            className="px-4 py-2 bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 font-semibold rounded-xl hover:bg-purple-50 dark:hover:bg-slate-700 transition-colors border border-purple-100 dark:border-slate-700 flex items-center gap-2 shadow-sm"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden sm:inline">Saqlash</span>
+          <button onClick={handleExport} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-400 hover:text-primary-500 transition-all">
+            <Download className="w-5 h-5" />
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50">
-        <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
-          <Plus className="w-6 h-6 text-cyan-500" />
-          Yangi so'z qo'shish
-        </h2>
-        
-        <form onSubmit={handleAddWord} className="flex flex-col gap-4">
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-6 ml-1">Yangi so'z qo'shish</h3>
+        <form onSubmit={handleAddWord} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Inglizcha so'z *"
-                value={newOriginal}
-                onChange={e => setNewOriginal(e.target.value)}
-                className="flex-1 px-5 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-medium"
-                required
+            <div className="relative group">
+              <input 
+                type="text" 
+                placeholder="Inglizcha so'z *" 
+                value={newOriginal} 
+                onChange={e => setNewOriginal(e.target.value)} 
+                className="w-full pl-6 pr-14 py-5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-3xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
+                required 
               />
-              <button
-                type="button"
-                onClick={handleSuggest}
-                disabled={!newOriginal.trim() || isSuggesting}
-                className="w-[52px] h-[52px] shrink-0 bg-cyan-100 dark:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 rounded-xl hover:bg-cyan-200 dark:hover:bg-cyan-500/30 transition-colors disabled:opacity-50 flex items-center justify-center"
-                title="Tarjima va ta'rifni avtomatik to'ldirish"
+              <button 
+                type="button" 
+                onClick={handleSuggest} 
+                disabled={!newOriginal.trim() || isSuggesting} 
+                className="absolute right-2.5 top-2.5 w-10 h-10 flex items-center justify-center text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-500/10 rounded-2xl transition-all disabled:opacity-30"
               >
                 {isSuggesting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
               </button>
             </div>
-            <input
-              type="text"
-              placeholder="O'zbekcha tarjimasi *"
-              value={newTranslation}
-              onChange={e => setNewTranslation(e.target.value)}
-              className="px-5 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-medium"
-              required
-            />
-            <input
-              type="text"
-              placeholder="So'z turkumi (noun, verb...)"
-              value={newPartOfSpeech}
-              onChange={e => setNewPartOfSpeech(e.target.value)}
-              className="px-5 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-medium"
-            />
-            <input
-              type="text"
-              placeholder="O'qilishi (masalan: /æpl/)"
-              value={newPronunciation}
-              onChange={e => setNewPronunciation(e.target.value)}
-              className="px-5 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-medium"
-            />
-            <input
-              type="text"
-              placeholder="Emoji (masalan: 🍎)"
-              value={newEmoji}
-              onChange={e => setNewEmoji(e.target.value)}
-              className="px-5 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-medium"
-            />
-            <input
-              type="text"
-              placeholder="Ta'rifi yoki misol"
-              value={newDescription}
-              onChange={e => setNewDescription(e.target.value)}
-              className="sm:col-span-2 px-5 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-medium"
-            />
-            <input
-              type="text"
-              placeholder="O'zbekcha izoh (qanday ishlatilishi)"
-              value={newUzbekExplanation}
-              onChange={e => setNewUzbekExplanation(e.target.value)}
-              className="sm:col-span-2 px-5 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none transition-all font-medium"
+            <input 
+              type="text" 
+              placeholder="O'zbekcha tarjimasi *" 
+              value={newTranslation} 
+              onChange={e => setNewTranslation(e.target.value)} 
+              className="w-full px-6 py-5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-3xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
+              required 
             />
           </div>
-          <div className="flex justify-end mt-2">
-            <button
-              type="submit"
-              disabled={!newOriginal.trim() || !newTranslation.trim()}
-              className="w-full sm:w-auto bg-gradient-to-r from-cyan-500 to-purple-500 text-white px-8 py-3 rounded-xl font-bold hover:shadow-lg hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
-            >
-              <Plus className="w-5 h-5" />
-              Qo'shish
-            </button>
-          </div>
+          <button 
+            type="submit" 
+            disabled={!newOriginal.trim() || !newTranslation.trim()} 
+            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50"
+          >
+            <Plus className="w-6 h-6" /> Lug'atga qo'shish
+          </button>
         </form>
       </div>
 
-      <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 overflow-hidden">
-        <div className="px-6 md:px-8 py-5 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Sizning lug'atingiz</h2>
-          
-          <div className="flex flex-wrap gap-2">
-            <button 
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${filter === 'all' ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-            >
-              Barchasi ({words.length})
-            </button>
-            <button 
-              onClick={() => setFilter('new')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${filter === 'new' ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-            >
-              Yangi ({words.filter(w => w.status === 'new').length})
-            </button>
-            <button 
-              onClick={() => setFilter('learning')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${filter === 'learning' ? 'bg-cyan-100 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-            >
-              O'rganilmoqda ({words.filter(w => w.status === 'learning').length})
-            </button>
-            <button 
-              onClick={() => setFilter('ready_for_exam')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors ${filter === 'ready_for_exam' ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-            >
-              Testga tayyor ({words.filter(w => w.status === 'ready_for_exam').length})
-            </button>
-            <button 
-              onClick={() => setFilter('mastered')}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1 ${filter === 'mastered' ? 'bg-lime-100 dark:bg-lime-500/20 text-lime-700 dark:text-lime-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-            >
-              <Sparkles className="w-3 h-3" /> Yodlangan ({words.filter(w => w.status === 'mastered').length})
-            </button>
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6 px-1">
+          <div className="relative w-full md:w-72 group">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+            <input 
+              type="text" 
+              placeholder="Qidirish..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-6 py-3.5 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl text-xs font-bold focus:border-primary-500 outline-none transition-all"
+            />
+          </div>
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-[1.5rem] w-full md:w-auto overflow-x-auto no-scrollbar">
+            {[
+              { id: 'all', label: 'Hammasi' },
+              { id: 'new', label: 'Yangi' },
+              { id: 'learning', label: 'O\'rganishda' },
+              { id: 'mastered', label: 'Yodlangan' }
+            ].map(f => (
+              <button 
+                key={f.id} 
+                onClick={() => setFilter(f.id as any)} 
+                className={`px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${filter === f.id ? 'bg-white dark:bg-slate-700 text-primary-500 shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+              >
+                {f.label}
+              </button>
+            ))}
           </div>
         </div>
-        
-        {filteredWords.length === 0 ? (
-          <div className="p-12 text-center text-slate-500 flex flex-col items-center">
-            <BookOpen className="w-16 h-16 text-slate-200 dark:text-slate-700 mb-4" />
-            <p className="text-lg font-medium">Hali so'zlar yo'q.</p>
-            <p className="text-sm mt-1">Yuqoridan yangi so'z qo'shing yoki "Mavzular" bo'limidan kashf qiling.</p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-700/50">
-            {filteredWords.map(word => (
-              <li key={word.id} className="px-6 md:px-8 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors group">
-                <div className="flex items-start gap-4">
-                  {word.emoji && (
-                    <div className="text-3xl shrink-0 mt-1">{word.emoji}</div>
-                  )}
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-bold text-slate-900 dark:text-slate-100 text-lg">{word.original}</p>
-                      {word.partOfSpeech && <span className="text-xs font-semibold text-cyan-500 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-500/10 px-2 py-0.5 rounded-md italic">{word.partOfSpeech}</span>}
-                      {word.pronunciation && <span className="text-sm font-normal text-slate-400 dark:text-slate-500">[{word.pronunciation}]</span>}
-                      
-                      {/* Status Badge */}
-                      {word.status === 'mastered' && <span className="text-xs font-bold text-lime-600 dark:text-lime-400 bg-lime-100 dark:bg-lime-500/20 px-2 py-0.5 rounded-full flex items-center gap-1"><Sparkles className="w-3 h-3"/> Yodlangan</span>}
-                      {word.status === 'ready_for_exam' && <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-500/20 px-2 py-0.5 rounded-full">Testga tayyor</span>}
-                      {word.status === 'learning' && <span className="text-xs font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-500/20 px-2 py-0.5 rounded-full">O'rganilmoqda ({word.progress}%)</span>}
-                      {word.status === 'new' && <span className="text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">Yangi</span>}
 
-                    </div>
-                    <p className="text-slate-600 dark:text-slate-300 font-medium">{word.translation}</p>
-                    {word.description && <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{word.description}</p>}
-                    {word.uzbekExplanation && <p className="text-sm text-cyan-600 dark:text-cyan-400 mt-1 italic">{word.uzbekExplanation}</p>}
-                  </div>
+        <div className="grid grid-cols-1 gap-4">
+          <AnimatePresence mode="popLayout">
+            {filteredWords.map((word, idx) => (
+              <motion.div 
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+                key={word.id} 
+                className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-5 group hover:shadow-xl hover:border-primary-500/30 transition-all"
+              >
+                <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform shadow-inner">
+                  {word.emoji || '📖'}
                 </div>
-                <button
-                  onClick={() => handleDelete(word.id)}
-                  className="text-slate-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 p-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-500/10 transition-all opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                  title="O'chirish"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
-              </li>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <span className="font-black text-slate-800 dark:text-white text-xl">{word.original}</span>
+                    {word.partOfSpeech && (
+                      <span className="text-[9px] font-black text-primary-500 uppercase bg-primary-50 dark:bg-primary-500/10 px-2 py-0.5 rounded italic">
+                        {word.partOfSpeech}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm font-bold text-slate-400">{word.translation}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {word.status === 'mastered' && (
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                  )}
+                  <button 
+                    onClick={() => handleDelete(word.id)} 
+                    className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </motion.div>
             ))}
-          </ul>
-        )}
+          </AnimatePresence>
+          {filteredWords.length === 0 && (
+            <div className="py-24 text-center bg-white dark:bg-slate-800 rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-slate-800">
+              <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Search className="w-10 h-10 text-slate-300" />
+              </div>
+              <h3 className="text-xl font-black text-slate-800 dark:text-white mb-2">So'zlar topilmadi</h3>
+              <p className="text-slate-400 font-bold">Qidiruv natijasida hech narsa topilmadi.</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1797,149 +1807,108 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
   };
 
   return (
-    <div className="max-w-xl mx-auto flex flex-col items-center">
-      <div className="w-full flex justify-between items-center mb-8 bg-white dark:bg-slate-800 px-6 py-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700/50">
-        <span className="font-bold text-slate-700 dark:text-slate-300">So'z {safeIndex + 1} / {words.length}</span>
+    <div className="max-w-2xl mx-auto space-y-8 pb-20">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-primary-50 dark:bg-primary-500/10 flex items-center justify-center">
+            <BookOpen className="w-6 h-6 text-primary-500" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{safeIndex + 1} / {words.length}</p>
+            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Flashcards</p>
+          </div>
+        </div>
         <div className="flex items-center gap-3">
-          <div className="w-32 h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
-              style={{ width: `${((safeIndex + 1) / words.length) * 100}%` }}
+          <div className="w-32 h-2 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: `${((safeIndex + 1) / words.length) * 100}%` }}
+              className="h-full bg-primary-500 rounded-full"
             />
           </div>
-          <span className="font-bold text-indigo-600 dark:text-indigo-400">{Math.round(((safeIndex + 1) / words.length) * 100)}%</span>
+          <span className="text-xs font-bold text-primary-500">{Math.round(((safeIndex + 1) / words.length) * 100)}%</span>
         </div>
       </div>
 
-      {/* Flashcard */}
-      <div 
-        className="w-full perspective-1000 cursor-pointer mb-10 relative group"
-        onClick={handleFlip}
-      >
+      <div className="perspective-1000 w-full aspect-[3/4] sm:aspect-[4/5] cursor-pointer" onClick={handleFlip}>
         <motion.div
-          className="w-full relative preserve-3d"
+          className="w-full h-full relative preserve-3d"
           animate={{ rotateY: isFlipped ? 180 : 0 }}
-          transition={{ duration: 0.6, type: "spring", stiffness: 260, damping: 20 }}
+          transition={{ duration: 0.6, type: "spring", stiffness: 200, damping: 20 }}
         >
           {/* Front */}
-          <div className="w-full relative backface-hidden bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700/50 flex flex-col items-center justify-center p-8 pb-20 transition-transform duration-300 min-h-[600px] sm:min-h-[650px]">
-            
-            {/* Emoji Section */}
-            <div className="w-32 h-32 sm:w-40 sm:h-40 mb-6 rounded-3xl overflow-hidden bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center border border-slate-100 dark:border-slate-600 shadow-inner relative shrink-0">
-              {currentWord.emoji ? (
-                <span className="text-7xl sm:text-8xl">{currentWord.emoji}</span>
-              ) : generatingEmojis.has(currentWord.id) ? (
-                <div className="flex flex-col items-center gap-2 text-slate-400">
-                  <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-                  <span className="text-xs font-medium">Kutmoqda...</span>
-                </div>
-              ) : (
-                <div className="text-slate-300">
-                  <ImageIcon className="w-12 h-12 opacity-50" />
-                </div>
-              )}
+          <div className="absolute inset-0 backface-hidden bg-white dark:bg-slate-800 rounded-[3.5rem] shadow-xl border border-slate-100 dark:border-slate-700 p-12 flex flex-col items-center justify-center text-center group">
+            <div className="absolute top-8 left-8">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-900 px-3 py-1 rounded-full">{currentWord.partOfSpeech || 'word'}</span>
             </div>
-
-            <div className="absolute top-6 left-6 sm:top-8 sm:left-8">
-              {currentWord.status === 'mastered' && <span className="text-xs font-bold text-lime-600 bg-lime-100 dark:bg-lime-900/30 dark:text-lime-400 px-3 py-1.5 rounded-full flex items-center gap-1 shadow-sm"><Sparkles className="w-3 h-3"/> Yodlangan</span>}
-              {currentWord.status === 'ready_for_exam' && <span className="text-xs font-bold text-purple-600 bg-purple-100 dark:bg-purple-900/30 dark:text-purple-400 px-3 py-1.5 rounded-full shadow-sm">Testga tayyor</span>}
-              {currentWord.status === 'learning' && <span className="text-xs font-bold text-cyan-600 bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-400 px-3 py-1.5 rounded-full shadow-sm">O'rganilmoqda ({currentWord.progress}%)</span>}
-              {currentWord.status === 'new' && <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-full shadow-sm">Yangi</span>}
-            </div>
-
-            <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-800 dark:text-slate-100 mb-4 text-center break-words w-full leading-normal py-2">
-              {currentWord.original}
-            </h2>
-            <div className="flex items-center justify-center gap-3 mb-8 flex-wrap">
-              {currentWord.partOfSpeech && (
-                <span className="text-sm font-semibold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-400 px-3 py-1 rounded-lg italic">{currentWord.partOfSpeech}</span>
-              )}
-              {currentWord.pronunciation && (
-                <p className="text-xl text-slate-400 dark:text-slate-500 font-mono">[{currentWord.pronunciation}]</p>
-              )}
-            </div>
-            {currentWord.description && (
-              <p className="text-slate-600 dark:text-slate-300 text-center text-base mb-10 max-w-md leading-relaxed">
-                {currentWord.description}
-              </p>
-            )}
-            <p className="text-slate-400 dark:text-slate-500 font-medium text-sm absolute bottom-8 bg-slate-50 dark:bg-slate-700/50 px-4 py-2 rounded-full">Aylantirish uchun bosing</p>
             
             <button 
               onClick={playTTS}
               disabled={isSpeaking}
-              className={`absolute top-6 right-6 sm:top-8 sm:right-8 p-3 sm:p-4 rounded-2xl transition-all shadow-sm ${isSpeaking ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-400 cursor-not-allowed' : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:scale-110'}`}
-              title="Talaffuzni eshitish"
+              className="absolute top-6 right-6 p-4 rounded-2xl bg-primary-50 dark:bg-primary-500/10 text-primary-500 hover:scale-110 active:scale-95 transition-all"
             >
-              {isSpeaking ? <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin" /> : <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />}
+              {isSpeaking ? <Loader2 className="w-6 h-6 animate-spin" /> : <Volume2 className="w-6 h-6" />}
             </button>
+
+            <div className="w-32 h-32 rounded-[2.5rem] bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-7xl mb-8 group-hover:scale-110 transition-transform">
+              {currentWord.emoji || '📖'}
+            </div>
+            
+            <h2 className="text-5xl font-black text-slate-800 dark:text-slate-100 mb-4">{currentWord.original}</h2>
+            {currentWord.pronunciation && <p className="text-xl text-slate-400 font-medium mb-6">[{currentWord.pronunciation}]</p>}
+            {currentWord.description && <p className="text-slate-500 dark:text-slate-400 max-w-sm line-clamp-3 leading-relaxed">{currentWord.description}</p>}
+            
+            <div className="absolute bottom-8 text-slate-300 font-bold text-[10px] uppercase tracking-[0.2em] animate-pulse">Aylantirish uchun bosing</div>
           </div>
 
           {/* Back */}
           <div 
-            className="absolute top-0 left-0 w-full h-full backface-hidden bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-[2.5rem] shadow-2xl shadow-purple-200/50 border-2 border-indigo-400/30 flex flex-col items-center justify-center p-8 transition-transform duration-300 overflow-y-auto"
+            className="absolute inset-0 backface-hidden bg-primary-500 rounded-[3.5rem] shadow-2xl p-12 flex flex-col items-center justify-center text-center text-white"
             style={{ transform: 'rotateY(180deg)' }}
           >
-            <div className="flex flex-col items-center justify-center w-full min-h-full py-10">
-              <h2 className="text-4xl sm:text-5xl font-extrabold mb-4 text-center break-words w-full drop-shadow-md leading-normal py-2">
-                {currentWord.translation}
-              </h2>
-              {currentWord.uzbekExplanation && (
-                <div className="mt-6 p-5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 max-w-sm w-full">
-                  <p className="text-indigo-100 text-sm font-semibold mb-1 uppercase tracking-wider">Qanday ishlatiladi:</p>
-                  <p className="text-white text-lg leading-relaxed">
-                    {currentWord.uzbekExplanation}
-                  </p>
-                </div>
-              )}
-            </div>
-            <p className="text-indigo-100 font-medium text-sm absolute bottom-8 bg-white/10 px-4 py-2 rounded-full backdrop-blur-md">Aylantirish uchun bosing</p>
+            <h2 className="text-5xl font-black mb-8 drop-shadow-lg">{currentWord.translation}</h2>
+            {currentWord.uzbekExplanation && (
+              <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 max-w-sm">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-2">Izoh</p>
+                <p className="text-lg font-medium leading-relaxed">{currentWord.uzbekExplanation}</p>
+              </div>
+            )}
+            <div className="absolute bottom-8 text-white/40 font-bold text-[10px] uppercase tracking-[0.2em]">Asliga qaytish</div>
           </div>
         </motion.div>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-4 w-full justify-center mb-8">
-        <button 
-          onClick={handlePrev}
-          className="p-5 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:scale-105 active:scale-95 transition-all"
-        >
+      <div className="flex items-center justify-center gap-6">
+        <button onClick={handlePrev} className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-primary-500 hover:scale-110 active:scale-95 transition-all shadow-sm">
           <ArrowLeft className="w-6 h-6" />
         </button>
         
         <button 
           onClick={fetchExamples}
           disabled={isLoadingExamples || !!examples}
-          className="flex-1 max-w-[220px] py-5 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700/50 text-slate-700 dark:text-slate-200 font-bold flex items-center justify-center gap-2 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100"
+          className="px-10 py-5 bg-primary-500 text-white font-bold rounded-3xl shadow-lg hover:shadow-primary-500/25 hover:scale-105 active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
         >
-          {isLoadingExamples ? <Loader2 className="w-6 h-6 animate-spin" /> : <Search className="w-6 h-6 text-indigo-500 dark:text-indigo-400" />}
+          {isLoadingExamples ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
           Misollar ko'rish
         </button>
 
-        <button 
-          onClick={handleNext}
-          className="p-5 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700/50 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-700/50 hover:scale-105 active:scale-95 transition-all"
-        >
+        <button onClick={handleNext} className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-primary-500 hover:scale-110 active:scale-95 transition-all shadow-sm">
           <ArrowRight className="w-6 h-6" />
         </button>
       </div>
 
-      {/* Examples Area */}
       <AnimatePresence>
         {examples && (
           <motion.div 
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="w-full bg-white/90 dark:bg-slate-800/90 backdrop-blur-xl p-8 rounded-3xl shadow-xl shadow-indigo-100/50 dark:shadow-none border border-white dark:border-slate-700"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm"
           >
-            <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-slate-700">
-              <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg">
-                <BookOpen className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              Misollar (Google Search)
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+              <Search className="w-5 h-5 text-primary-500" />
+              Qidiruv natijalari
             </h3>
-            <div className="text-slate-700 dark:text-slate-300 max-w-none font-medium leading-relaxed [&>p]:mb-4 [&>strong]:text-slate-900 dark:[&>strong]:text-white">
+            <div className="prose dark:prose-invert max-w-full text-slate-600 dark:text-slate-400">
               <ReactMarkdown>{examples}</ReactMarkdown>
             </div>
           </motion.div>
@@ -1957,7 +1926,6 @@ function AdminTab() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        // limit is 500 for admin to see more users
         const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(500));
         const snap = await getDocs(q);
         setUsers(snap.docs.map(d => ({id: d.id, ...d.data()})));
@@ -1981,130 +1949,102 @@ function AdminTab() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-[#1a1a1f] p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-500">Jami Foydalanuvchilar</p>
-            <p className="text-3xl font-black text-slate-800 dark:text-slate-100">{users.length}</p>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600">
-            <Users className="w-6 h-6" />
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Foydalanuvchilar</p>
+          <div className="flex items-center justify-between">
+            <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{users.length}</p>
+            <Users className="w-5 h-5 text-blue-500" />
           </div>
         </div>
-        <div className="bg-white dark:bg-[#1a1a1f] p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-500">Faollar (O't &gt; 0)</p>
-            <p className="text-3xl font-black text-slate-800 dark:text-slate-100">{activeStreakUsers}</p>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600">
-            <Flame className="w-6 h-6" />
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Faol Seriyalar</p>
+          <div className="flex items-center justify-between">
+            <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{activeStreakUsers}</p>
+            <Flame className="w-5 h-5 text-orange-500" />
           </div>
         </div>
-        <div className="bg-white dark:bg-[#1a1a1f] p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-500">Yodlangan so'zlar</p>
-            <p className="text-3xl font-black text-slate-800 dark:text-slate-100">{totalWords}</p>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600">
-            <GraduationCap className="w-6 h-6" />
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Yodlangan</p>
+          <div className="flex items-center justify-between">
+            <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{totalWords}</p>
+            <GraduationCap className="w-5 h-5 text-indigo-500" />
           </div>
         </div>
-        <div className="bg-white dark:bg-[#1a1a1f] p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-500">Tiroj (Tangalar)</p>
-            <p className="text-3xl font-black text-slate-800 dark:text-slate-100">{totalCoins}</p>
-          </div>
-          <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-500">
-            <span className="text-2xl">🪙</span>
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Jami Tangalar</p>
+          <div className="flex items-center justify-between">
+            <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{totalCoins}</p>
+            <span className="text-xl">🪙</span>
           </div>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-[#1a1a1f] p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-md">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Shield className="w-6 h-6 text-rose-500" />
-            Boshqaruv Paneli
+      <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-primary-500" />
+            Boshqaruv
           </h2>
           <div className="relative">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
               placeholder="Qidiruv..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-rose-500 outline-none w-full md:w-64"
+              className="pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-primary-500 outline-none w-full md:w-64"
             />
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex justify-center p-8">
-            <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-                    <th className="p-4 font-semibold text-sm text-slate-500 dark:text-slate-400">Foydalanuvchi</th>
-                    <th className="p-4 font-semibold text-sm text-slate-500 dark:text-slate-400">Rol</th>
-                    <th className="p-4 font-semibold text-sm text-slate-500 dark:text-slate-400 text-center">Tangalar</th>
-                    <th className="p-4 font-semibold text-sm text-slate-500 dark:text-slate-400 text-center">So'zlar</th>
-                    <th className="p-4 font-semibold text-sm text-slate-500 dark:text-slate-400 text-center">O't</th>
-                    <th className="p-4 font-semibold text-sm text-slate-500 dark:text-slate-400 text-right">Ro'yxatdan o'tgan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-500">Foydalanuvchilar topilmadi</td>
-                    </tr>
-                  ) : filteredUsers.map(u => (
-                    <tr key={u.id} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/20 transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex-shrink-0 overflow-hidden">
-                            {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-slate-500">{u.displayName?.[0] || u.email?.[0]?.toUpperCase()}</div>}
-                          </div>
-                          <div>
-                            <div className="font-bold text-slate-800 dark:text-slate-200">{u.displayName || 'Anonim'}</div>
-                            {u.phone && <div className="text-xs text-emerald-600 dark:text-emerald-400 font-bold tracking-wide mt-0.5">{u.phone}</div>}
-                            <div className="text-xs text-slate-500 truncate max-w-[150px] md:max-w-xs">{u.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4 text-sm">
-                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${u.role === 'admin' ? 'bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
-                          {u.role || 'user'}
-                        </span>
-                      </td>
-                      <td className="p-4 text-center font-bold text-amber-500 bg-amber-50/30 dark:bg-amber-900/5">{u.coins || 0}</td>
-                      <td className="p-4 text-center font-bold text-indigo-500">{u.wordsLearned || 0}</td>
-                      <td className="p-4 text-center font-bold text-orange-500 bg-orange-50/30 dark:bg-orange-900/5">{u.streak || 0}</td>
-                      <td className="p-4 text-right text-xs font-medium text-slate-500">
-                        {u.createdAt ? new Date(u.createdAt).toLocaleDateString('uz-UZ') : 'Noma\'lum'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-slate-50 dark:bg-slate-900/50">
+              <tr>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Foydalanuvchi</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Tanga</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">So'zlar</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">O't</th>
+                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Sana</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+              {filteredUsers.map(u => (
+                <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                        {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-slate-400">{u.displayName?.[0]}</div>}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-slate-800 dark:text-slate-100 truncate text-sm">{u.displayName || 'Anonim'}</div>
+                        <div className="text-[10px] text-slate-500 truncate">{u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-center font-bold text-amber-500 text-sm">{u.coins || 0}</td>
+                  <td className="px-6 py-4 text-center font-bold text-primary-500 text-sm">{u.wordsLearned || 0}</td>
+                  <td className="px-6 py-4 text-center font-bold text-orange-500 text-sm">{u.streak || 0}</td>
+                  <td className="px-6 py-4 text-right text-[10px] font-bold text-slate-400">
+                    {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
 
-function StatsTab({ words, stats, userProfile, streak }: { words: Word[], stats: Record<string, DailyStats>, userProfile: UserProfile | null, streak: number }) {
-  const totalLearned = words.filter(w => w.status === 'mastered').length;
-  const totalWords = words.length;
 
+function ProfileTab({ words, stats, userProfile, streak, user, onEditProfile }: { words: Word[], stats: Record<string, DailyStats>, userProfile: UserProfile | null, streak: number, user: User, onEditProfile: () => void }) {
+  const totalLearned = words.filter(w => w.status === 'learned' || w.status === 'mastered').length;
+  const totalWords = words.length;
   const coins = userProfile?.coins || 0;
-  const totalTime = Object.values(stats || {}).reduce((acc, curr) => acc + ((curr as any)?.timeSpent || 0), 0);
 
   const badges = [
     { id: 'novice', name: 'Boshlovchi', desc: '5 ta so\'z yodlandi', icon: Zap, color: 'text-blue-500', bg: 'bg-blue-100', threshold: 5 },
@@ -2124,297 +2064,133 @@ function StatsTab({ words, stats, userProfile, streak }: { words: Word[], stats:
     }
     return title;
   };
-
-  const currentTitle = getLevelTitle(totalLearned);
-
-  useEffect(() => {
-    if (userProfile && totalLearned !== userProfile.wordsLearned) {
-       setDoc(doc(db, 'users', userProfile.uid), { wordsLearned: totalLearned }, { merge: true });
-       setDoc(doc(db, 'public_profiles', userProfile.uid), { wordsLearned: totalLearned }, { merge: true });
-    }
-  }, [totalLearned, userProfile]);
-
+  
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'public_profiles'), orderBy('wordsLearned', 'desc'), limit(50));
+    const q = query(collection(db, 'public_profiles'), orderBy('wordsLearned', 'desc'), limit(10));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const users: any[] = [];
       querySnapshot.forEach((doc) => {
-        users.push(doc.data());
+        users.push({ uid: doc.id, ...doc.data() });
       });
       setLeaderboard(users);
       setIsLoadingLeaderboard(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'public_profiles');
       setIsLoadingLeaderboard(false);
     });
     return () => unsubscribe();
   }, []);
 
+  const totalTime = Object.values(stats || {}).reduce((acc, curr) => acc + ((curr as any)?.timeSpent || 0), 0);
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m ${s}s`;
+    if (h > 0) return `${h} soat ${m} daqiqa`;
+    return `${m} daqiqa`;
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
-      {/* Profile Header */}
-      <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 p-6 md:p-10 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-5">
-          <Trophy className="w-64 h-64 text-indigo-500" />
+    <div className="space-y-8 pb-12">
+      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col items-center text-center relative overflow-hidden">
+        <div className="absolute top-6 right-6">
+          <button onClick={onEditProfile} className="w-10 h-10 rounded-2xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-primary-500 transition-all flex items-center justify-center">
+            <Edit3 className="w-5 h-5" />
+          </button>
         </div>
         
-        <div className="relative flex flex-col md:flex-row gap-8 items-center">
-          <div className="relative">
-            <div className="w-32 h-32 md:w-36 md:h-36 rounded-full border-4 border-white dark:border-slate-700 shadow-2xl overflow-hidden bg-slate-200">
-              {userProfile?.photoURL ? (
-                <img src={userProfile.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+        <div className="relative mb-6">
+          <div className="w-32 h-32 rounded-[2.5rem] p-1 bg-gradient-to-br from-primary-400 to-secondary-600 shadow-2xl">
+            <div className="w-full h-full rounded-[2.3rem] overflow-hidden bg-white dark:bg-slate-900 border-4 border-white dark:border-slate-800">
+              {userProfile?.photoURL || user.photoURL ? (
+                <img src={userProfile?.photoURL || user.photoURL || ''} alt="Profile" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-indigo-500 text-white text-5xl font-black">
-                  {userProfile?.displayName?.[0] || '?'}
+                <div className="w-full h-full flex items-center justify-center bg-primary-500 text-white text-4xl font-black">
+                  {(userProfile?.displayName || user.displayName || '?')[0]}
                 </div>
               )}
             </div>
-            <div className="absolute -bottom-2 -right-2 bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-4 py-1.5 rounded-full flex items-center justify-center font-black text-xs shadow-lg border-4 border-white dark:border-slate-800 uppercase tracking-widest whitespace-nowrap">
-              {currentTitle}
-            </div>
           </div>
+          <div className="absolute -bottom-2 -right-2 bg-emerald-500 w-8 h-8 rounded-full border-4 border-white dark:border-slate-800 flex items-center justify-center shadow-lg">
+            <div className="w-2 h-2 bg-white rounded-full animate-ping" />
+          </div>
+        </div>
 
-          <div className="flex-1 text-center md:text-left space-y-2">
-            <h1 className="text-3xl md:text-4xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-tight">
-              {userProfile?.displayName || 'Foydalanuvchi'}
-            </h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">{userProfile?.email}</p>
-            
-            <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-6">
-              <div className="bg-slate-100 dark:bg-slate-700/50 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700">
-                <p className="text-[10px] uppercase font-bold text-slate-400">Holat</p>
-                <div className="flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-orange-500" />
-                  <span className="font-black text-slate-700 dark:text-slate-200">{streak} kun</span>
-                </div>
-              </div>
-              <div className="bg-slate-100 dark:bg-slate-700/50 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700">
-                <p className="text-[10px] uppercase font-bold text-slate-400">Tangalar</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🪙</span>
-                  <span className="font-black text-slate-700 dark:text-slate-200">{coins}</span>
-                </div>
-              </div>
-              <div className="bg-slate-100 dark:bg-slate-700/50 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700">
-                <p className="text-[10px] uppercase font-bold text-slate-400">Yodlangan</p>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span className="font-black text-slate-700 dark:text-slate-200">{totalLearned}</span>
-                </div>
-              </div>
-            </div>
+        <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-1">
+          {userProfile?.displayName || user.displayName || 'Bilimdon'}
+        </h2>
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-primary-50 dark:bg-primary-500/10 rounded-full mb-8">
+          <Trophy className="w-3.5 h-3.5 text-primary-500" />
+          <span className="text-[10px] font-black text-primary-500 uppercase tracking-[0.2em]">{getLevelTitle(totalLearned)}</span>
+        </div>
+
+        <div className="grid grid-cols-3 w-full gap-4 pt-8 border-t border-slate-100 dark:border-slate-700">
+          <div className="text-center">
+            <p className="text-2xl font-black text-slate-800 dark:text-white">{totalLearned}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">So'zlar</p>
+          </div>
+          <div className="text-center border-x border-slate-100 dark:border-slate-700">
+            <p className="text-2xl font-black text-slate-800 dark:text-white">{streak}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Seriya</p>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-black text-slate-800 dark:text-white">{coins}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tangalar</p>
           </div>
         </div>
       </div>
 
-      {/* Badges Gallery - School 21 style */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-tighter flex items-center gap-3">
-            <Award className="w-6 h-6 text-indigo-500" />
-            Nishonlar va Yutuqlar
-          </h2>
-          <span className="text-sm font-bold text-slate-400">
-            {badges.filter(b => totalLearned >= b.threshold).length} / {badges.length}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {badges.map((badge) => {
-            const isEarned = totalLearned >= badge.threshold;
-            const progress = Math.min(100, (totalLearned / badge.threshold) * 100);
-            const Icon = badge.icon;
-            
-            return (
-              <div 
-                key={badge.id}
-                className={`relative group p-6 rounded-[2rem] border transition-all duration-500 flex flex-col items-center gap-4 ${
-                  isEarned 
-                    ? 'bg-white dark:bg-slate-700 border-white dark:border-slate-600 shadow-xl scale-100 hover:scale-105' 
-                    : 'bg-slate-100 dark:bg-slate-800/30 border-dashed border-slate-200 dark:border-slate-700 opacity-60 grayscale'
-                }`}
-              >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isEarned ? badge.bg : 'bg-slate-200 dark:bg-slate-700'} shadow-inner`}>
-                  {isEarned ? (
-                    <Icon className={`w-8 h-8 ${badge.color}`} />
-                  ) : (
-                    <Lock className="w-6 h-6 text-slate-400" />
-                  )}
-                </div>
-                
-                <div className="text-center space-y-1">
-                  <p className="text-sm font-black text-slate-800 dark:text-slate-100 truncate w-full">{badge.name}</p>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight font-medium">{badge.desc}</p>
-                </div>
-
-                {!isEarned && (
-                  <div className="absolute bottom-4 w-12 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-indigo-500 transition-all duration-1000" 
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+          <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-500/10 flex items-center justify-center">
+              <PieChart className="w-5 h-5 text-primary-500" />
+            </div>
+            Statistika
+          </h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center p-5 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <Clock className="w-5 h-5 text-indigo-500" />
+                <span className="text-sm font-bold text-slate-600 dark:text-slate-400">Jami o'qilgan vaqt</span>
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Leaderboard Section */}
-      <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 p-4 sm:p-6 md:p-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 uppercase tracking-tighter flex items-center gap-2 sm:gap-3">
-            <Users className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-500" />
-            Eng kuchli bilimdonlar
-          </h2>
-        </div>
-
-        {isLoadingLeaderboard ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              <span className="text-lg font-black text-slate-800 dark:text-white">{formatTime(totalTime)}</span>
+            </div>
+            <div className="flex justify-between items-center p-5 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <Target className="w-5 h-5 text-emerald-500" />
+                <span className="text-sm font-bold text-slate-600 dark:text-slate-400">O'rtacha aniqlik</span>
+              </div>
+              <span className="text-lg font-black text-slate-800 dark:text-white">85%</span>
+            </div>
           </div>
-        ) : (
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+          <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center">
+              <Users className="w-5 h-5 text-amber-500" />
+            </div>
+            Leaderboard
+          </h3>
           <div className="space-y-3">
-            {leaderboard.map((user, idx) => {
-              const userTitle = getLevelTitle(user.wordsLearned || 0);
-              return (
-                <div 
-                  key={idx} 
-                  id={user.uid === userProfile?.uid ? "me-in-leaderboard" : undefined}
-                  className={`flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-2xl transition-all border ${
-                    user.uid === userProfile?.uid 
-                      ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/30 ring-2 ring-indigo-500/10' 
-                      : 'bg-slate-50 dark:bg-slate-800/30 border-slate-100 dark:border-slate-700/50 hover:border-indigo-200 dark:hover:border-indigo-500/30'
-                  }`}
-                >
-                  <div className="w-6 sm:w-8 flex-shrink-0 flex items-center justify-center font-black text-base sm:text-lg text-slate-400">
-                    {idx + 1}
+            {isLoadingLeaderboard ? (
+              <div className="flex items-center justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-primary-500" /></div>
+            ) : leaderboard.map((l, i) => (
+              <div key={l.uid} className={`flex items-center justify-between p-3 rounded-2xl transition-all ${l.uid === user?.uid ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20 scale-[1.02]' : 'bg-slate-50 dark:bg-slate-900/50 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-100 dark:border-slate-800'}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${i === 0 ? 'bg-yellow-400 text-yellow-900' : i === 1 ? 'bg-slate-300 text-slate-700' : i === 2 ? 'bg-amber-600 text-amber-50' : 'bg-slate-200 dark:bg-slate-800 text-slate-500'}`}>
+                    {i + 1}
                   </div>
-                  
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-slate-200 flex-shrink-0 border-2 border-white dark:border-slate-700 shadow-sm relative">
-                    {user.photoURL ? (
-                      <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 font-bold">
-                        {user.displayName?.[0] || '?'}
-                      </div>
-                    )}
-                    {user.streak >= 2 && (
-                      <div className="absolute -bottom-1 -right-1 bg-orange-500 text-white w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[8px] sm:text-[10px] font-black border-2 border-white dark:border-slate-800">
-                        <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 fill-white" />
-                      </div>
-                    )}
+                  <div className="w-10 h-10 rounded-xl overflow-hidden bg-slate-200 shrink-0 border-2 border-white/20">
+                    <img src={l.photoURL || `https://ui-avatars.com/api/?name=${l.displayName || 'U'}&background=random`} alt="" className="w-full h-full object-cover" />
                   </div>
-
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate flex items-center gap-2">
-                      {user.displayName || 'Anonim User'}
-                      {user.uid === userProfile?.uid && (
-                        <span className="text-[8px] bg-indigo-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter">Siz</span>
-                      )}
-                    </p>
-                    <p className="text-[9px] sm:text-[10px] text-indigo-500 dark:text-indigo-400 font-black uppercase tracking-widest truncate">{userTitle}</p>
-                  </div>
-
-                  <div className="text-right flex-shrink-0">
-                    <div className="flex items-center gap-1 sm:gap-1.5 justify-end">
-                      <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-500" />
-                      <p className="font-black text-sm sm:text-base text-slate-700 dark:text-slate-200">{user.wordsLearned || 0}</p>
-                    </div>
-                    <p className="text-[8px] sm:text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">So'zlar</p>
-                  </div>
+                  <span className="font-bold truncate text-sm">{l.displayName || 'Noma\'lum'}</span>
                 </div>
-              );
-            })}
-
-            {/* Self indicator if not in top 50 */}
-            {!isLoadingLeaderboard && userProfile && !leaderboard.find(u => u.uid === userProfile.uid) && (
-              <>
-                <div className="flex justify-center py-2">
-                  <div className="w-1.5 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-1" />
-                  <div className="w-1.5 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-1" />
-                  <div className="w-1.5 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-1" />
-                </div>
-                <div className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 ring-2 ring-indigo-500/10">
-                  <div className="w-6 sm:w-8 flex-shrink-0 flex items-center justify-center font-black text-base sm:text-lg text-slate-400">
-                    ?
-                  </div>
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-slate-200 flex-shrink-0 border-2 border-white dark:border-slate-700 shadow-sm relative">
-                    {userProfile.photoURL ? (
-                      <img src={userProfile.photoURL} alt={userProfile.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 font-bold">
-                        {userProfile.displayName?.[0] || '?'}
-                      </div>
-                    )}
-                    {streak >= 2 && (
-                      <div className="absolute -bottom-1 -right-1 bg-orange-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white dark:border-slate-800">
-                        <Flame className="w-3 h-3 fill-white" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-slate-800 dark:text-slate-100 truncate flex items-center gap-2">
-                      {userProfile.displayName || 'Siz'}
-                      <span className="text-[8px] bg-indigo-500 text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter">Siz</span>
-                    </p>
-                    <p className="text-[10px] text-indigo-500 dark:text-indigo-400 font-black uppercase tracking-widest">{currentTitle}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex items-center gap-1.5 justify-end">
-                      <BookOpen className="w-4 h-4 text-indigo-500" />
-                      <p className="font-black text-slate-700 dark:text-slate-200">{totalLearned}</p>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">So'zlar</p>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )
-      }
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 p-8">
-           <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 uppercase tracking-wider flex items-center gap-3">
-            <PieChart className="w-5 h-5 text-indigo-500" />
-            Umumiy Statistika
-          </h3>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
-              <span className="text-slate-500 dark:text-slate-400 font-bold">Jami so'zlar</span>
-              <span className="text-xl font-black text-slate-800 dark:text-slate-200">{totalWords}</span>
-            </div>
-            <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
-              <span className="text-slate-500 dark:text-slate-400 font-bold">Yodlangan so'zlar</span>
-              <span className="text-xl font-black text-emerald-500">{totalLearned}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 p-8">
-           <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-6 uppercase tracking-wider flex items-center gap-3">
-            <Clock className="w-5 h-5 text-indigo-500" />
-            Vaqt Sarfi
-          </h3>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-800/30 rounded-2xl">
-              <span className="text-slate-500 dark:text-slate-400 font-bold">Jami o'qilgan vaqt</span>
-              <span className="text-xl font-black text-slate-800 dark:text-slate-200">{formatTime(totalTime)}</span>
-            </div>
+                <span className={`text-sm font-black ${l.uid === user?.uid ? 'text-white' : 'text-primary-500'}`}>{l.wordsLearned} so'z</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -2427,139 +2203,103 @@ function PracticeTab({ words, setWords, setStats, setCoins }: { words: Word[], s
 
   if (words.length < 5) {
     return (
-      <div className="text-center py-20 bg-white/80 backdrop-blur-xl rounded-3xl border border-white shadow-xl shadow-indigo-100/50 dark:shadow-none dark:bg-slate-800/80 max-w-2xl mx-auto">
-        <Dumbbell className="w-16 h-16 text-slate-200 dark:text-slate-600 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-slate-700 dark:text-slate-200 mb-2">So'zlar yetarli emas</h2>
-        <p className="text-slate-500 dark:text-slate-400">O'yin o'ynash uchun lug'atda kamida 5 ta so'z bo'lishi kerak. Hozirda sizda {words.length} ta so'z bor.</p>
+      <div className="text-center py-24 px-4 bg-white dark:bg-slate-800 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm max-w-2xl mx-auto">
+        <div className="w-24 h-24 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+          <Dumbbell className="w-12 h-12 text-slate-300" />
+        </div>
+        <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-2">So'zlar yetarli emas</h2>
+        <p className="text-slate-500 font-medium max-w-sm mx-auto">Mashqlarni boshlash uchun lug'atda kamida 5 ta so'z bo'lishi kerak. Hozirda sizda {words.length} ta so'z bor.</p>
       </div>
     );
   }
 
   if (mode === 'menu') {
+    const MODES = [
+      { id: 'flashcards', name: 'Flashcards', desc: 'Xotirani mustahkamlash', icon: Layers, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-500/10' },
+      { id: 'quiz', name: 'Tezkor Test', desc: 'Variantlar orasidan toping', icon: Zap, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-500/10' },
+      { id: 'listening', name: 'Eshitib Topish', desc: 'Talaffuzga e\'tibor bering', icon: Volume2, color: 'text-pink-500', bg: 'bg-pink-50 dark:bg-pink-500/10' },
+      { id: 'spelling', name: 'Yozma Mashq', desc: 'To\'g\'ri yozishni o\'rganing', icon: Edit3, color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-500/10' },
+      { id: 'matching', name: 'So\'z Yomg\'iri', desc: 'Tezlik va aniqlik testi', icon: Sparkles, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-500/10' },
+      { id: 'exam', name: 'Mukammal Test', desc: 'Yulduzli bilimdon bo\'ling', icon: Trophy, color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-500/10', premium: true },
+    ];
+
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-        <button 
-          onClick={() => setMode('flashcards')}
-          className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-6 rounded-3xl shadow-xl shadow-blue-100/50 dark:shadow-none border border-white dark:border-slate-700 hover:scale-[1.02] transition-transform text-left group"
-        >
-          <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900/50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-blue-500 transition-colors">
-            <Layers className="w-7 h-7 text-blue-500 dark:text-blue-400 group-hover:text-white transition-colors" />
-          </div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Fleshkartalar</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Tezkor xotira mashqi (XP beradi).</p>
-        </button>
-
-        <button 
-          onClick={() => setMode('quiz')}
-          className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-6 rounded-3xl shadow-xl shadow-indigo-100/50 dark:shadow-none border border-white dark:border-slate-700 hover:scale-[1.02] transition-transform text-left group"
-        >
-          <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-indigo-500 transition-colors">
-            <Zap className="w-7 h-7 text-indigo-500 dark:text-indigo-400 group-hover:text-white transition-colors" />
-          </div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Tezkor Test</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Variantlar orasidan to'g'ri tarjimani toping.</p>
-        </button>
-
-        <button 
-          onClick={() => setMode('matching')}
-          className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-6 rounded-3xl shadow-xl shadow-emerald-100/50 dark:shadow-none border border-white dark:border-slate-700 hover:scale-[1.02] transition-transform text-left group"
-        >
-          <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-900/50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
-            <Zap className="w-7 h-7 text-emerald-500 dark:text-emerald-400 group-hover:text-white transition-colors" />
-          </div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">So'z Yomg'iri</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Tushayotgan so'zlarga to'g'ri izohni belgilang.</p>
-        </button>
-
-        <button 
-          onClick={() => setMode('listening')}
-          className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-6 rounded-3xl shadow-xl shadow-pink-100/50 dark:shadow-none border border-white dark:border-slate-700 hover:scale-[1.02] transition-transform text-left group"
-        >
-          <div className="w-14 h-14 bg-pink-100 dark:bg-pink-900/50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-pink-500 transition-colors">
-            <Volume2 className="w-7 h-7 text-pink-500 dark:text-pink-400 group-hover:text-white transition-colors" />
-          </div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Eshitib Topish</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Talaffuzni eshitib, to'g'ri tarjimani toping.</p>
-        </button>
-
-        <button 
-          onClick={() => setMode('spelling')}
-          className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-6 rounded-3xl shadow-xl shadow-cyan-100/50 dark:shadow-none border border-white dark:border-slate-700 hover:scale-[1.02] transition-transform text-left group"
-        >
-          <div className="w-14 h-14 bg-cyan-100 dark:bg-cyan-900/50 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-cyan-500 transition-colors">
-            <Edit3 className="w-7 h-7 text-cyan-500 dark:text-cyan-400 group-hover:text-white transition-colors" />
-          </div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">Yozma Mashq</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">O'zbekcha tarjimasiga qarab inglizchasini yozing.</p>
-        </button>
-
-        <button 
-          onClick={() => setMode('exam')}
-          className="lg:col-span-1 bg-gradient-to-br from-amber-400 to-orange-500 p-6 rounded-3xl shadow-xl shadow-orange-200/50 dark:shadow-none border border-white/20 hover:scale-[1.02] transition-transform text-left group relative overflow-hidden flex flex-col justify-between"
-        >
-          <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-          <div className="relative z-10">
-            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
-              <Trophy className="w-7 h-7 text-white" />
+      <div className="space-y-10 pb-24">
+        <header className="px-1">
+          <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-2">Bilimingizni Sinang</h2>
+          <p className="text-slate-500 font-medium">Har bir to'g'ri javob uchun XP va tangalar oling.</p>
+        </header>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {MODES.map((m, idx) => (
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              key={m.id}
+              onClick={() => setMode(m.id as any)}
+              className={`p-8 rounded-[3.5rem] border-2 transition-all text-left group relative overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 ${
+                m.premium 
+                ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white' 
+                : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-primary-500/50'
+              }`}
+            >
+              <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center mb-6 transition-transform group-hover:scale-110 group-hover:rotate-3 shadow-inner ${m.premium ? 'bg-white/10 dark:bg-slate-900/10' : m.bg}`}>
+                <m.icon className={`w-8 h-8 ${m.premium ? 'text-white dark:text-slate-900' : m.color}`} />
+              </div>
+              <h3 className={`text-2xl font-black mb-1 ${m.premium ? 'text-white dark:text-slate-900' : 'text-slate-800 dark:text-white'}`}>{m.name}</h3>
+              <p className={`text-sm font-bold ${m.premium ? 'text-white/60 dark:text-slate-900/60' : 'text-slate-400'}`}>{m.desc}</p>
+              
+              {m.premium && (
+                <div className="absolute top-6 right-6">
+                  <div className="px-3 py-1 bg-amber-400 text-amber-950 text-[10px] font-black rounded-full uppercase tracking-widest shadow-lg">Premium</div>
+                </div>
+              )}
+              
+              {!m.premium && (
+                <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-slate-50 dark:bg-slate-900/50 rounded-full blur-2xl group-hover:bg-primary-500/10 transition-colors" />
+              )}
+            </motion.button>
+          ))}
+        </div>
+        <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
+            <Target className="w-6 h-6 text-primary-500" />
+            Yodlash tizimi haqida
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0 mt-1 font-bold">1</div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Har bir so'z 0% dan boshlanadi. 4 xil mashqdan o'tishingiz kerak: Test, Yomg'ir, Eshitish va Yozish.</p>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0 mt-1 font-bold">2</div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Har bir mashq so'zga 25% o'sish beradi. 100% bo'lganda so'z "Yodlangan" deb hisoblanadi.</p>
+              </div>
             </div>
-            <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-              Mukammal Test
-            </h3>
-            <p className="text-sm text-white/90">So'zlarning 100% o'rganilganligini isbotlab oltin yulduz oling.</p>
+            <div className="space-y-4">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 mt-1 font-bold">3</div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">"Mukammal Test" faqat 100% li so'zlar uchun. Undan o'tsangiz so'z butunlay master qilinadi.</p>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center shrink-0 mt-1 font-bold">4</div>
+                <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Agar mashqda xato qilsangiz, so'zning o'rganish darajasi pasayishi mumkin. Ehtiyot bo'ling!</p>
+              </div>
+            </div>
           </div>
-        </button>
-
-        <div className="md:col-span-2 lg:col-span-3 mt-2 bg-slate-50 dark:bg-slate-800/50 p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-700">
-          <h4 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
-             <Target className="w-6 h-6 text-amber-500" />
-             Mukammal Testga qanday o'tiladi?
-          </h4>
-          <ul className="space-y-4 text-slate-600 dark:text-slate-300">
-            <li className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-              <span>Har bir yangi so'z "O'rganilmoqda" holatida bo'ladi va o'rganish darajasi 0% dan boshlanadi.</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-              <span>So'z "Mukammal test" ga tayyor bo'lishi uchun, uni <b>barcha 4 xil baholanuvchi mashqda</b> (Tezkor Test, So'z Yomg'iri, Eshitib Topish, Yozma Mashq) kamida 1 martadan to'g'ri yechishingiz kerak. (Fleshkartalar faqat yodlash uchun)</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-              <span>Har bir bajarilgan turli baholanuvchi mashq so'zga 25% qo'shadi. Barchasidan bittadan o'tib, so'z 100% ga chiqqanda u <b>"Mukammal testga tayyor"</b> deb belgilanadi.</span>
-            </li>
-             <li className="flex items-start gap-3">
-              <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-              <span>Agar "Mukammal test" da xira qilsangiz, so'z reytingi yana 0% ga tushib qoladi.</span>
-            </li>
-          </ul>
         </div>
       </div>
     );
   }
 
-  if (mode === 'quiz') {
-    return <QuizMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
-  }
-
-  if (mode === 'flashcards') {
-    return <FlashcardsMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
-  }
-
-  if (mode === 'listening') {
-    return <ListeningMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
-  }
-
-  if (mode === 'matching') {
-    return <MatchingMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
-  }
-
-  if (mode === 'spelling') {
-    return <SpellingMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
-  }
-
-  if (mode === 'exam') {
-    return <ExamMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} setCoins={setCoins} />;
-  }
+  if (mode === 'quiz') return <QuizMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
+  if (mode === 'flashcards') return <FlashcardsMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
+  if (mode === 'listening') return <ListeningMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
+  if (mode === 'matching') return <MatchingMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
+  if (mode === 'spelling') return <SpellingMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} />;
+  if (mode === 'exam') return <ExamMode words={words} setWords={setWords} setStats={setStats} onBack={() => setMode('menu')} setCoins={setCoins} />;
 
   return null;
 }
@@ -2570,26 +2310,13 @@ function QuizMode({ words, setWords, setStats, onBack }: any) {
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(6000);
   const initialized = useRef(false);
-  const messageRef = useRef<string | null>(null);
 
-  // Initialize questions only once when the component mounts
   useEffect(() => {
     if (!initialized.current) {
-      const shuffleArray = (array: any[]) => {
-        const newArray = [...array];
-        for (let i = newArray.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-        }
-        return newArray;
-      };
-
-      const shuffledWords = shuffleArray(words); // All words
-      const q = shuffledWords.map(word => {
-        const others = shuffleArray(words.filter(w => w.id !== word.id)).slice(0, 3);
-        const options = shuffleArray([word, ...others]);
+      const q = [...words].sort(() => 0.5 - Math.random()).map(word => {
+        const others = [...words].filter(w => w.id !== word.id).sort(() => 0.5 - Math.random()).slice(0, 3);
+        const options = [word, ...others].sort(() => 0.5 - Math.random());
         return { word, options };
       });
       setQuestions(q);
@@ -2597,184 +2324,119 @@ function QuizMode({ words, setWords, setStats, onBack }: any) {
     }
   }, [words]);
 
-  const handleAnswer = useCallback((option: any | 'timeout') => {
+  const handleAnswer = (optionId: string) => {
     if (selectedAnswer) return;
-    
-    const isTimeout = option === 'timeout';
-    const optionId = isTimeout ? 'timeout' : option.id;
     setSelectedAnswer(optionId);
     
-    const isCorrect = !isTimeout && optionId === questions[currentIndex]?.word?.id;
-    const currentWord = questions[currentIndex]?.word;
-
+    const isCorrect = optionId === questions[currentIndex].word.id;
     if (isCorrect) {
       setScore(s => s + 1);
-      
-      setWords((prev: Word[]) => prev.map(w => {
-        if (w.id === currentWord?.id) {
-          return updateWordProgress(w, 'quiz', true);
-        }
-        return w;
-      }));
-      
-      // Update stats only if it's a new word being learned
-      if (currentWord?.status === 'new') {
-        const today = new Date().toISOString().split('T')[0];
-        setStats((prev: any) => {
-          const current = prev[today] || { timeSpent: 0, wordsLearned: 0 };
-          return { ...prev, [today]: { ...current, wordsLearned: current.wordsLearned + 1 } };
-        });
-      }
+      setWords((prev: Word[]) => prev.map(w => w.id === questions[currentIndex].word.id ? updateWordProgress(w, 'quiz', true) : w));
     } else {
-      // Demote progress on wrong answer
-      setWords((prev: Word[]) => prev.map(w => {
-        if (w.id === currentWord?.id) {
-          return updateWordProgress(w, 'quiz', false);
-        }
-        return w;
-      }));
+      setWords((prev: Word[]) => prev.map(w => w.id === questions[currentIndex].word.id ? updateWordProgress(w, 'quiz', false) : w));
     }
 
     setTimeout(() => {
       if (currentIndex < questions.length - 1) {
         setCurrentIndex(i => i + 1);
         setSelectedAnswer(null);
-        setTimeLeft(6000);
       } else {
         setShowResult(true);
       }
-    }, 1500);
-  }, [selectedAnswer, currentIndex, questions, setWords, setStats]);
-
-  // Timer logic
-  useEffect(() => {
-    if (selectedAnswer !== null || showResult || questions.length === 0) return;
-
-    const startTime = Date.now();
-    const timer = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const remaining = Math.max(0, 6000 - elapsed);
-      setTimeLeft(remaining);
-      
-      if (remaining === 0) {
-        clearInterval(timer);
-        handleAnswer('timeout');
-      }
-    }, 50);
-
-    return () => clearInterval(timer);
-  }, [selectedAnswer, showResult, questions.length, currentIndex, handleAnswer]);
+    }, 1000);
+  };
 
   if (questions.length === 0) return null;
 
   if (showResult) {
-    const percentage = questions.length > 0 ? score / questions.length : 0;
-    if (!messageRef.current) messageRef.current = getMotivationalMessage(percentage);
-    const message = messageRef.current;
     return (
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-12 rounded-3xl shadow-xl shadow-indigo-100/50 dark:shadow-none border border-white dark:border-slate-700 text-center max-w-2xl mx-auto"
-      >
-        <Trophy className="w-24 h-24 text-yellow-500 mx-auto mb-6 drop-shadow-md" />
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">Test Yakunlandi!</h2>
-        <p className="text-xl text-slate-600 dark:text-slate-400 mb-2">Sizning natijangiz: <span className="font-bold text-indigo-600 dark:text-indigo-400">{score}</span> / {questions.length}</p>
-        <p className="text-lg text-emerald-600 dark:text-emerald-400 font-medium mb-8">
-          {message}
-        </p>
-        <button onClick={onBack} className="px-8 py-4 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 hover:shadow-lg hover:-translate-y-1 transition-all">
-          Asosiy menuga qaytish
-        </button>
-      </motion.div>
+      <div className="max-w-2xl mx-auto text-center py-24 px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl"
+        >
+          <div className="w-24 h-24 bg-indigo-50 dark:bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-8">
+            <Trophy className="w-12 h-12 text-indigo-500" />
+          </div>
+          <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-2">Test Yakunlandi!</h2>
+          <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-indigo-600 font-black text-2xl">{score} / {questions.length}</span></p>
+          <button 
+            onClick={onBack} 
+            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl transition-all active:scale-[0.98]"
+          >
+            Menyuga qaytish
+          </button>
+        </motion.div>
+      </div>
     );
   }
 
   const currentQ = questions[currentIndex];
-  const progress = ((currentIndex) / questions.length) * 100;
-  const displayTime = Math.ceil(timeLeft / 1000);
-
   return (
-    <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-8 rounded-3xl shadow-xl shadow-indigo-100/50 dark:shadow-none border border-white dark:border-slate-700 max-w-3xl mx-auto overflow-hidden relative mt-4">
-      {/* Timer Progress Bar */}
-      <div className="absolute top-0 left-0 w-full h-2 bg-slate-100 dark:bg-slate-700">
-        <div 
-          className={`h-full ${timeLeft <= 1000 ? 'bg-red-500' : 'bg-indigo-500'}`}
-          style={{ width: `${(timeLeft / 6000) * 100}%`, transition: selectedAnswer !== null ? 'none' : 'width 50ms linear' }}
-        />
-      </div>
-
-      <div className="flex justify-between items-center mb-6 mt-2">
-        <button onClick={onBack} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors bg-slate-50 dark:bg-slate-700/50 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
+    <div className="max-w-2xl mx-auto space-y-8 pb-20 px-4">
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        
-        <div className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 shadow-sm">
-          <span className={`text-xl font-black ${timeLeft <= 1000 ? 'text-red-500 animate-pulse' : 'text-slate-600 dark:text-slate-300'}`}>
-            {displayTime}
-          </span>
-        </div>
-
-        <span className="font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-1.5 rounded-full">
-          {currentIndex + 1} / {questions.length}
-        </span>
-      </div>
-      
-      {/* Progress Bar */}
-      <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full mb-10 overflow-hidden">
-        <div 
-          className="bg-gradient-to-r from-indigo-500 to-blue-500 h-full transition-all duration-500 ease-out rounded-full" 
-          style={{ width: `${progress}%` }}
-        ></div>
-      </div>
-
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentIndex}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.3 }}
-        >
-          <div className="text-center mb-10">
-            <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-800 dark:text-slate-100 mb-4">{currentQ.word.original}</h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">Ushbu so'zning to'g'ri tarjimasini toping</p>
+        <div className="flex flex-col items-center">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Jarayon</span>
+          <div className="text-sm font-black text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 px-4 py-1 rounded-full">
+            {currentIndex + 1} / {questions.length}
           </div>
+        </div>
+        <div className="text-indigo-600 font-black text-lg bg-indigo-50 dark:bg-indigo-500/10 px-4 py-1 rounded-full shadow-sm">
+          {score}
+        </div>
+      </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl text-center relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-b from-indigo-50/50 to-transparent dark:from-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-[0.2em] mb-4">Tarjimasini toping</p>
+        <h2 className="text-5xl font-black text-slate-800 dark:text-white mb-4 group-hover:scale-105 transition-transform duration-500">{currentQ.word.original}</h2>
+        {currentQ.word.pronunciation && (
+          <div className="inline-flex items-center px-4 py-1.5 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
+            <Volume2 className="w-4 h-4 text-slate-400 mr-2" />
+            <p className="text-sm font-bold text-slate-400 font-mono">[{currentQ.word.pronunciation}]</p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <AnimatePresence mode="wait">
+          <motion.div 
+            key={currentIndex}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="contents"
+          >
             {currentQ.options.map((opt: any) => {
-              let btnClass = "p-5 rounded-2xl border-2 text-lg font-semibold transition-all flex items-center justify-between group ";
-              let icon = null;
-
-              if (!selectedAnswer) {
-                btnClass += "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 text-slate-700 dark:text-slate-300 hover:shadow-md hover:-translate-y-1";
-              } else {
-                if (opt.id === currentQ.word.id) {
-                  btnClass += "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 shadow-sm scale-[1.02]";
-                  icon = <CheckCircle2 className="w-6 h-6 text-emerald-500 dark:text-emerald-400" />;
-                } else if (opt.id === selectedAnswer) {
-                  btnClass += "border-red-500 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 shadow-sm scale-[0.98]";
-                  icon = <XCircle className="w-6 h-6 text-red-500 dark:text-red-400" />;
-                } else {
-                  btnClass += "border-slate-200 dark:border-slate-700 opacity-40 text-slate-500 dark:text-slate-400 scale-[0.98]";
-                }
+              let stateClass = "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white hover:border-indigo-500 hover:shadow-lg hover:-translate-y-1";
+              if (selectedAnswer) {
+                if (opt.id === currentQ.word.id) stateClass = "bg-emerald-500 border-emerald-400 text-white shadow-xl scale-[1.02] z-10";
+                else if (opt.id === selectedAnswer) stateClass = "bg-rose-500 border-rose-400 text-white shadow-xl";
+                else stateClass = "opacity-40 bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 scale-95";
               }
 
               return (
-                <button 
-                  key={opt.id} 
-                  onClick={() => handleAnswer(opt)} 
-                  disabled={!!selectedAnswer} 
-                  className={btnClass}
+                <button
+                  key={opt.id}
+                  onClick={() => handleAnswer(opt.id)}
+                  disabled={!!selectedAnswer}
+                  className={`p-6 rounded-[2.5rem] border-2 font-black text-lg transition-all flex items-center justify-between ${stateClass}`}
                 >
-                  <span>{opt.translation}</span>
-                  {icon && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>{icon}</motion.div>}
+                  {opt.translation}
+                  <div className="flex items-center">
+                    {selectedAnswer && opt.id === currentQ.word.id && <CheckCircle2 className="w-7 h-7" />}
+                    {selectedAnswer && opt.id === selectedAnswer && opt.id !== currentQ.word.id && <XCircle className="w-7 h-7" />}
+                  </div>
                 </button>
               );
             })}
-          </div>
-        </motion.div>
-      </AnimatePresence>
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
   );
 }
@@ -2826,7 +2488,7 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
       setTimeout(() => {
         setCurrentIndex(i => i + 1);
         setIsTransitioning(false);
-      }, 450); // Meticulously wait for 0.4s flip to finish, so the back face isn't seen
+      }, 450); 
     } else {
       setTimeout(() => {
         setCurrentIndex(i => i + 1);
@@ -2840,19 +2502,25 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
     if (!messageRef.current) messageRef.current = getMotivationalMessage(percentage);
     const message = messageRef.current;
     return (
-      <div className="max-w-2xl mx-auto text-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-12 rounded-3xl shadow-xl shadow-blue-100/50 dark:shadow-none border border-white dark:border-slate-700">
-        <Layers className="w-24 h-24 text-blue-500 mx-auto mb-6" />
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-4">Mashq yakunlandi!</h2>
-        <p className="text-xl text-slate-600 dark:text-slate-400 mb-2">Siz {score} ta so'zni bildingiz.</p>
-        <p className="text-lg text-emerald-600 dark:text-emerald-400 font-medium mb-8">
-          {message}
-        </p>
-        <button 
-          onClick={onBack}
-          className="px-8 py-4 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors"
+      <div className="max-w-2xl mx-auto text-center py-24 px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl"
         >
-          Menyuga qaytish
-        </button>
+          <div className="w-24 h-24 bg-blue-50 dark:bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-8">
+            <Layers className="w-12 h-12 text-blue-500" />
+          </div>
+          <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-2">Mashq Yakunlandi!</h2>
+          <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-blue-600 font-black text-2xl">{score} / {questions.length}</span></p>
+          <p className="text-lg text-emerald-600 dark:text-emerald-400 font-bold mb-12">{message}</p>
+          <button 
+            onClick={onBack} 
+            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl transition-all active:scale-[0.98]"
+          >
+            Menyuga qaytish
+          </button>
+        </motion.div>
       </div>
     );
   }
@@ -2860,48 +2528,58 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
   if (!currentWord) return null;
 
   return (
-    <div className="max-w-md mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-      <div className="w-full flex justify-between items-center mb-8 px-4">
-        <button onClick={onBack} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><ArrowLeft className="w-6 h-6" /></button>
-        <div className="text-lg font-bold text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800/50 px-4 py-1 rounded-full">
-          {currentIndex + 1} / {questions.length}
+    <div className="max-w-2xl mx-auto space-y-8 pb-20 px-4">
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+          <ArrowLeft className="w-6 h-6" />
+        </button>
+        <div className="flex flex-col items-center">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Jarayon</span>
+          <div className="text-sm font-black text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 px-4 py-1 rounded-full">
+            {currentIndex + 1} / {questions.length}
+          </div>
         </div>
-        <div className="w-6"></div>
+        <div className="text-blue-600 font-black text-lg bg-blue-50 dark:bg-blue-500/10 px-4 py-1 rounded-full shadow-sm">
+          {score}
+        </div>
       </div>
 
-      <div className="relative w-full aspect-[3/4] perspective-1000 cursor-pointer group" onClick={() => !isTransitioning && setIsFlipped(!isFlipped)}>
+      <div className="relative w-full aspect-[3/4.5] sm:aspect-[3/4] perspective-1000 cursor-pointer group" onClick={() => !isTransitioning && setIsFlipped(!isFlipped)}>
         <motion.div 
           className="w-full h-full relative preserve-3d"
           animate={{ rotateY: isFlipped ? 180 : 0 }}
-          transition={{ duration: 0.4, ease: "easeInOut" }}
+          transition={{ duration: 0.6, type: "spring", stiffness: 260, damping: 20 }}
         >
           {/* Front */}
-          <div className="absolute w-full h-full backface-hidden bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl shadow-blue-200/50 dark:shadow-none border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center p-8">
-            {currentWord.emoji && <span className="text-6xl mb-6">{currentWord.emoji}</span>}
-            <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-800 dark:text-slate-100 mb-4 text-center break-words w-full">
+          <div className="absolute w-full h-full backface-hidden bg-white dark:bg-slate-800 rounded-[3.5rem] shadow-2xl border-2 border-slate-50 dark:border-slate-700 flex flex-col items-center justify-center p-12 text-center">
+            <div className="absolute top-8 left-8 w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-300">
+              <Eye className="w-6 h-6" />
+            </div>
+            {currentWord.emoji && <span className="text-8xl mb-8 group-hover:scale-110 transition-transform duration-500">{currentWord.emoji}</span>}
+            <h2 className="text-5xl font-black text-slate-800 dark:text-white mb-6 leading-tight break-words w-full">
               {currentWord.original}
             </h2>
             {currentWord.pronunciation && (
-              <p className="text-lg text-slate-400 dark:text-slate-500 font-mono bg-slate-50 dark:bg-slate-900/50 px-4 py-1.5 rounded-full">
-                {currentWord.pronunciation}
-              </p>
+              <div className="px-6 py-2 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
+                <p className="text-lg font-bold text-slate-400 font-mono">[{currentWord.pronunciation}]</p>
+              </div>
             )}
-            <p className="text-slate-400 dark:text-slate-500 font-medium text-sm absolute bottom-8">Tarjimasini ko'rish uchun bosing</p>
+            <p className="text-slate-300 font-black text-[10px] uppercase tracking-[0.3em] absolute bottom-12">Tarjimasini ko'rish uchun bosing</p>
           </div>
 
           {/* Back */}
           <div 
-            className="absolute w-full h-full backface-hidden bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-[2.5rem] shadow-2xl shadow-blue-200/50 dark:shadow-none border-2 border-blue-400/30 flex flex-col items-center justify-center p-8 overflow-y-auto"
+            className="absolute w-full h-full backface-hidden bg-slate-900 dark:bg-white rounded-[3.5rem] shadow-2xl border-2 border-slate-800 dark:border-slate-100 flex flex-col items-center justify-center p-12 overflow-y-auto text-center"
             style={{ transform: 'rotateY(180deg)' }}
           >
-            <div className={`flex flex-col items-center justify-center w-full min-h-full py-10 transition-opacity duration-200 ${isTransitioning && !isFlipped ? 'opacity-0' : 'opacity-100'}`}>
-              <h2 className="text-4xl sm:text-5xl font-extrabold mb-4 text-center break-words w-full drop-shadow-md leading-normal py-2">
+            <div className={`flex flex-col items-center justify-center w-full min-h-full transition-all duration-300 ${isTransitioning && !isFlipped ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
+              <span className="text-blue-500 font-black text-[10px] uppercase tracking-[0.3em] mb-8">O'zbekcha tarjimasi</span>
+              <h2 className="text-5xl font-black text-white dark:text-slate-900 mb-8 leading-tight break-words w-full">
                 {currentWord.translation}
               </h2>
               {currentWord.uzbekExplanation && (
-                <div className="mt-6 p-5 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 w-full text-center">
-                  <p className="text-blue-100 text-sm font-semibold mb-2 uppercase tracking-wider">Qanday ishlatiladi:</p>
-                  <p className="text-white text-lg leading-relaxed">
+                <div className="p-6 bg-white/5 dark:bg-slate-900/5 rounded-3xl border border-white/10 dark:border-slate-900/10 w-full">
+                  <p className="text-slate-400 dark:text-slate-500 text-sm font-bold leading-relaxed">
                     {currentWord.uzbekExplanation}
                   </p>
                 </div>
@@ -2911,35 +2589,49 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
         </motion.div>
       </div>
 
-      <div className="w-full mt-8 px-4 h-16">
-        {!isFlipped ? (
-          <div className="flex gap-4 w-full h-full">
-            <button 
-              onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
-              disabled={isTransitioning}
-              className="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold rounded-2xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 disabled:opacity-50"
+      <div className="w-full h-20">
+        <AnimatePresence mode="wait">
+          {!isFlipped ? (
+            <motion.div 
+              key="controls-front"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex gap-4 h-full"
             >
-              <Eye className="w-6 h-6" /> Bilmayman
-            </button>
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleNext(true); }}
-              disabled={isTransitioning}
-              className="flex-1 bg-emerald-500 text-white font-bold rounded-2xl hover:bg-emerald-600 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-200/50 dark:shadow-none disabled:opacity-50"
+              <button 
+                onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
+                disabled={isTransitioning}
+                className="flex-1 bg-white dark:bg-slate-800 text-slate-400 font-black rounded-3xl border-2 border-slate-100 dark:border-slate-700 hover:border-blue-500 hover:text-blue-500 transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95 shadow-sm"
+              >
+                <Eye className="w-6 h-6" /> Bilmayman
+              </button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleNext(true); }}
+                disabled={isTransitioning}
+                className="flex-1 bg-emerald-500 text-white font-black rounded-3xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-500/20 disabled:opacity-50 active:scale-95"
+              >
+                <CheckCircle2 className="w-6 h-6" /> Bilaman
+              </button>
+            </motion.div>
+          ) : (
+            <motion.div 
+              key="controls-back"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex h-full"
             >
-              <CheckCircle2 className="w-6 h-6" /> Bilaman
-            </button>
-          </div>
-        ) : (
-          <div className="flex w-full h-full">
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleNext(false); }}
-              disabled={isTransitioning}
-              className="flex-1 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-200/50 dark:shadow-none disabled:opacity-50"
-            >
-              Keyingi so'z <ArrowRight className="w-6 h-6 ml-1" />
-            </button>
-          </div>
-        )}
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleNext(false); }}
+                disabled={isTransitioning}
+                className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95"
+              >
+                Keyingi so'z <ArrowRight className="w-6 h-6" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -2958,292 +2650,250 @@ function ListeningMode({ words, setWords, setStats, onBack }: any) {
   const [questionCount, setQuestionCount] = useState(0);
   const [userInput, setUserInput] = useState('');
   
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const initialized = useRef(false);
   const totalQuestions = words.length;
-  const messageRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!initialized.current && words.length > 0) {
-      const shuffledWords = [...words].sort(() => 0.5 - Math.random());
-      setQuestions(shuffledWords);
+      setQuestions([...words].sort(() => 0.5 - Math.random()));
       initialized.current = true;
     }
   }, [words]);
 
   useEffect(() => {
     if (questions.length > 0 && questionCount < questions.length) {
-      const word = questions[questionCount];
-      if (currentWord?.id !== word.id) {
-        loadNewQuestion(word);
-      }
+      loadNewQuestion(questions[questionCount]);
     }
   }, [questions, questionCount]);
 
   const generateAudio = (text: string) => {
+    if (!text) return;
     setIsGeneratingAudio(true);
     setAudioError(null);
-    
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
     playUniversalTTS(
       text,
-      () => {
-        setIsGeneratingAudio(false);
-        setIsPlaying(true);
-      },
-      () => {
-        setIsPlaying(false);
-      },
+      () => { setIsGeneratingAudio(false); setIsPlaying(true); },
+      () => { setIsPlaying(false); },
       (err) => {
         console.error("Speech error:", err);
         setIsGeneratingAudio(false);
         setIsPlaying(false);
-        setAudioError("Ovozni chalishda xatolik yuz berdi. (Brauzeringiz qo'llab-quvvatlamaydi)");
+        setAudioError("Ovozni chalishda xatolik yuz berdi.");
       }
     );
+  };
+
+  const playAudio = () => {
+    if (!currentWord || isPlaying || isGeneratingAudio) return;
+    let textToRead = questionType === 'description' ? (currentWord.description || currentWord.original) : currentWord.original;
+    if (questionType === 'description' && currentWord.description) {
+      const regex = new RegExp(`\\b${currentWord.original}\\b`, 'gi');
+      textToRead = currentWord.description.replace(regex, 'this word');
+    }
+    generateAudio(textToRead);
   };
 
   const loadNewQuestion = (target: Word) => {
     setResult(null);
     setAudioError(null);
     setUserInput('');
-    
     const progressRatio = questionCount / totalQuestions;
     let type: 'word' | 'description' | 'dictation' = 'word';
-
-    if (progressRatio >= 0.6) {
-      type = 'dictation';
-    } else if (progressRatio >= 0.3) {
-      if (target.description && target.description.trim().length > 0) {
-        type = 'description';
-      } else {
-        type = 'word';
-      }
-    } else {
-      type = 'word';
-    }
+    if (progressRatio >= 0.7) type = 'dictation';
+    else if (progressRatio >= 0.4 && target.description) type = 'description';
     
     setQuestionType(type);
     setCurrentWord(target);
     
     if (type !== 'dictation') {
-      const wrongOptions = [...words].filter((w: Word) => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 3);
-      const allOptions = [target, ...wrongOptions].sort(() => 0.5 - Math.random());
-      setOptions(allOptions);
-    } else {
-      setOptions([]);
+      const wrong = [...words].filter(w => w.id !== target.id).sort(() => 0.5 - Math.random()).slice(0, 3);
+      setOptions([target, ...wrong].sort(() => 0.5 - Math.random()));
     }
-    
-    let textToRead = type === 'description' ? target.description! : target.original;
-    if (type === 'description') {
-      const regex = new RegExp(`\\b${target.original}\\b`, 'gi');
-      textToRead = textToRead.replace(regex, 'this word');
-    }
-    generateAudio(textToRead);
-  };
 
-  useEffect(() => {
-    return () => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-      }
-    };
-  }, []);
-
-  const checkCorrectness = (isCorrect: boolean) => {
-    if (isCorrect) {
-      setResult('correct');
-      setScore(s => s + 1);
-      
-      setWords((prev: Word[]) => prev.map(w => {
-        if (w.id === currentWord!.id) {
-          return updateWordProgress(w, 'listening', true);
-        }
-        return w;
-      }));
-
-      if (currentWord!.status === 'new') {
-        const today = new Date().toISOString().split('T')[0];
-        setStats((prev: any) => ({
-          ...prev,
-          [today]: {
-            ...prev[today],
-            wordsLearned: (prev[today]?.wordsLearned || 0) + 1
-          }
-        }));
-      }
-    } else {
-      setResult('incorrect');
-      setWords((prev: Word[]) => prev.map(w => {
-        if (w.id === currentWord!.id) {
-          return updateWordProgress(w, 'listening', false);
-        }
-        return w;
-      }));
-    }
-    
     setTimeout(() => {
-      setQuestionCount(c => c + 1);
-    }, 2000);
+      let text = type === 'description' ? (target.description || target.original) : target.original;
+      if (type === 'description' && target.description) {
+        const regex = new RegExp(`\\b${target.original}\\b`, 'gi');
+        text = target.description.replace(regex, 'this word');
+      }
+      generateAudio(text);
+    }, 800);
   };
 
-  const handleAnswer = (selected: Word) => {
+  const handleAnswer = (option: Word) => {
     if (result) return;
-    checkCorrectness(selected.id === currentWord?.id);
+    const isCorrect = option.id === currentWord?.id;
+    setResult(isCorrect ? 'correct' : 'incorrect');
+    if (isCorrect) {
+      setScore(s => s + 1);
+      setWords((prev: Word[]) => prev.map(w => w.id === currentWord!.id ? updateWordProgress(w, 'listening', true) : w));
+    } else {
+      setWords((prev: Word[]) => prev.map(w => w.id === currentWord!.id ? updateWordProgress(w, 'listening', false) : w));
+    }
+    setTimeout(() => setQuestionCount(c => c + 1), 1500);
   };
 
   const checkDictation = () => {
-    if (result || !currentWord) return;
-    const normalize = (str: string) => str.toLowerCase().replace(/[.,!?]/g, '').trim();
-    const isCorrect = normalize(userInput) === normalize(currentWord.original);
-    checkCorrectness(isCorrect);
-  };
-
-  const playAudio = () => {
-    if (currentWord) {
-      let textToRead = questionType === 'description' ? currentWord.description! : currentWord.original;
-      if (questionType === 'description') {
-        const regex = new RegExp(`\\b${currentWord.original}\\b`, 'gi');
-        textToRead = textToRead.replace(regex, 'this word');
-      }
-      generateAudio(textToRead);
+    if (result || !userInput.trim()) return;
+    const isCorrect = userInput.trim().toLowerCase() === currentWord?.original.toLowerCase();
+    setResult(isCorrect ? 'correct' : 'incorrect');
+    if (isCorrect) {
+      setScore(s => s + 1);
+      setWords((prev: Word[]) => prev.map(w => w.id === currentWord!.id ? updateWordProgress(w, 'listening', true) : w));
+    } else {
+      setWords((prev: Word[]) => prev.map(w => w.id === currentWord!.id ? updateWordProgress(w, 'listening', false) : w));
     }
+    setTimeout(() => setQuestionCount(c => c + 1), 2000);
   };
 
-  if (questionCount >= totalQuestions) {
-    const percentage = totalQuestions > 0 ? score / totalQuestions : 0;
-    if (!messageRef.current) messageRef.current = getMotivationalMessage(percentage);
-    const message = messageRef.current;
+  if (questionCount >= totalQuestions && totalQuestions > 0) {
     return (
-      <div className="max-w-2xl mx-auto text-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-12 rounded-3xl shadow-xl shadow-pink-100/50 dark:shadow-none border border-white dark:border-slate-700">
-        <Trophy className="w-24 h-24 text-pink-500 mx-auto mb-6" />
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-4">Mashq yakunlandi!</h2>
-        <p className="text-xl text-slate-600 dark:text-slate-400 mb-2">Natijangiz: {score} / {totalQuestions}</p>
-        <p className="text-lg text-emerald-600 dark:text-emerald-400 font-medium mb-8">
-          {message}
-        </p>
-        <button 
-          onClick={onBack}
-          className="px-8 py-4 bg-pink-600 text-white font-bold rounded-xl hover:bg-pink-700 transition-colors"
+      <div className="max-w-2xl mx-auto text-center py-24 px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl"
         >
-          Menyuga qaytish
-        </button>
+          <div className="w-24 h-24 bg-pink-50 dark:bg-pink-500/10 rounded-full flex items-center justify-center mx-auto mb-8">
+            <Trophy className="w-12 h-12 text-pink-500" />
+          </div>
+          <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-2">Mashq Yakunlandi!</h2>
+          <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-pink-600 font-black text-2xl">{score} / {totalQuestions}</span></p>
+          <button 
+            onClick={onBack} 
+            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl transition-all active:scale-[0.98]"
+          >
+            Menyuga qaytish
+          </button>
+        </motion.div>
       </div>
     );
   }
 
+  if (!currentWord) return null;
+
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <button 
-          onClick={onBack}
-          className="p-2 bg-white/50 dark:bg-slate-800/50 rounded-xl hover:bg-white dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-300"
-        >
+    <div className="max-w-2xl mx-auto space-y-8 pb-20 px-4">
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
-          {questionCount + 1} / {totalQuestions}
+        <div className="flex flex-col items-center">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Jarayon</span>
+          <div className="text-sm font-black text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 px-4 py-1 rounded-full">
+            {questionCount + 1} / {totalQuestions}
+          </div>
         </div>
-        <div className="text-pink-600 dark:text-pink-400 font-bold">
-          {score} to'g'ri
+        <div className="text-pink-600 font-black text-lg bg-pink-50 dark:bg-pink-500/10 px-4 py-1 rounded-full shadow-sm">
+          {score}
         </div>
       </div>
 
-      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-8 rounded-3xl shadow-xl shadow-pink-100/50 dark:shadow-none border border-white dark:border-slate-700 text-center">
-        <div className="mb-8">
-          <button 
-            onClick={playAudio}
-            disabled={isPlaying || isGeneratingAudio}
-            className={`w-24 h-24 rounded-full flex items-center justify-center mx-auto transition-all duration-300 ${
-              (isPlaying || isGeneratingAudio) 
-                ? 'bg-pink-100 dark:bg-pink-900/50 text-pink-500 scale-110 shadow-lg shadow-pink-200/50 dark:shadow-none' 
-                : audioError
-                ? 'bg-red-100 dark:bg-red-900/50 text-red-500 hover:bg-red-200 dark:hover:bg-red-800/50'
-                : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-pink-50 dark:hover:bg-slate-600 hover:text-pink-600'
-            }`}
-          >
-            {isGeneratingAudio ? <Loader2 className="w-10 h-10 animate-spin" /> : <Volume2 className="w-10 h-10" />}
-          </button>
-          
-          {audioError ? (
-            <p className="mt-4 text-red-500 dark:text-red-400 font-medium px-4">
-              {audioError}
-            </p>
-          ) : (
-            <p className="mt-4 text-slate-500 dark:text-slate-400 font-medium">
-              {questionType === 'description' 
-                ? "Ta'rifni tinglang va mos so'zni tanlang" 
-                : questionType === 'dictation'
-                ? "So'zni tinglang va uni yozing"
-                : "So'zni tinglang va to'g'ri tarjimani tanlang"}
-            </p>
+      <div className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl text-center relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-b from-pink-50/50 to-transparent dark:from-pink-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        
+        <button
+          onClick={playAudio}
+          disabled={isPlaying || isGeneratingAudio}
+          className={`w-36 h-36 rounded-[2.5rem] flex items-center justify-center mx-auto transition-all relative z-10 ${
+            isPlaying || isGeneratingAudio ? 'bg-pink-500 text-white scale-110 shadow-2xl shadow-pink-500/40' : 'bg-slate-50 dark:bg-slate-900 text-pink-500 hover:bg-pink-50 shadow-inner'
+          }`}
+        >
+          {isGeneratingAudio ? <Loader2 className="w-16 h-16 animate-spin" /> : (
+            <div className="relative">
+              <Volume2 className="w-16 h-16" />
+              {isPlaying && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-24 h-24 bg-white/20 rounded-full animate-ping" />
+                </div>
+              )}
+            </div>
           )}
+        </button>
+        
+        <div className="mt-10">
+          <p className="text-xl font-black text-slate-800 dark:text-white mb-2">
+            {questionType === 'description' ? "Ta'rifni tinglang" : questionType === 'dictation' ? "So'zni tinglang" : "So'zni tinglang"}
+          </p>
+          <p className="text-sm text-slate-400 font-bold">
+            {questionType === 'description' ? "va so'zni variantlar orasidan toping" : questionType === 'dictation' ? "va uni to'g'ri yozing" : "va tarjimasini toping"}
+          </p>
         </div>
 
-        {questionType === 'dictation' ? (
-          <div className="flex flex-col items-center gap-4 mt-8">
-            <span className="text-xs font-bold bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 px-3 py-1 rounded-full uppercase tracking-wider mb-2">Qiyinroq (Yozish)</span>
-            <input
-              type="text"
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              disabled={result !== null}
-              placeholder="Eshitgan so'zingizni yozing..."
-              className={`w-full max-w-md p-4 bg-transparent border-2 rounded-xl outline-none font-bold text-lg transition-colors text-center ${
-                result === 'correct' 
-                  ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400' 
-                  : result === 'incorrect' 
-                  ? 'border-red-500 text-red-600 dark:text-red-400' 
-                  : 'border-slate-300 dark:border-slate-600 text-indigo-600 dark:text-indigo-400 focus:border-indigo-500'
-              }`}
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && userInput.trim() && !result) {
-                  checkDictation();
-                }
-              }}
-            />
-            
-            {result === 'incorrect' && (
-              <div className="text-red-600 dark:text-red-400 font-medium mt-2">
-                To'g'ri javob: <strong className="font-black">{currentWord?.original}</strong>
-              </div>
-            )}
-
-            {!result && (
-              <button 
-                onClick={checkDictation}
-                disabled={!userInput.trim()}
-                className="w-full max-w-md py-4 mt-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50"
-              >
-                Tekshirish
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {options.map((option, index) => (
-              <button
-                key={index}
-                onClick={() => handleAnswer(option)}
-                disabled={result !== null}
-                className={`p-4 rounded-xl font-bold text-lg transition-all border-2 ${
-                  result && option.id === currentWord?.id
-                    ? 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-500 text-emerald-700 dark:text-emerald-400'
-                    : result && result === 'incorrect' && option.id !== currentWord?.id
-                    ? 'bg-red-100 dark:bg-red-900/30 border-red-500 text-red-700 dark:text-red-400 opacity-50'
-                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-pink-500 hover:text-pink-600 dark:hover:text-pink-400'
-                }`}
-              >
-                {questionType === 'description' ? option.original : option.translation}
-              </button>
-            ))}
+        {audioError && (
+          <div className="mt-4 p-3 bg-rose-50 dark:bg-rose-500/10 text-rose-500 text-xs font-bold rounded-xl border border-rose-100 dark:border-rose-900/30">
+            {audioError}
           </div>
         )}
       </div>
+
+      <AnimatePresence mode="wait">
+        <motion.div 
+          key={questionCount}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          className="space-y-4"
+        >
+          {questionType === 'dictation' ? (
+            <div className="space-y-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={userInput}
+                  onChange={e => setUserInput(e.target.value)}
+                  disabled={!!result}
+                  placeholder="Shu yerga yozing..."
+                  className={`w-full p-8 bg-white dark:bg-slate-800 border-2 rounded-[2rem] outline-none font-black text-2xl text-center shadow-sm transition-all ${
+                    result === 'correct' ? 'border-emerald-500 text-emerald-600' : result === 'incorrect' ? 'border-rose-500 text-rose-600' : 'border-slate-100 dark:border-slate-700 focus:border-pink-500'
+                  }`}
+                  autoFocus
+                  onKeyDown={e => e.key === 'Enter' && checkDictation()}
+                />
+                {!result && (
+                  <button 
+                    onClick={checkDictation}
+                    className="absolute right-4 top-4 bottom-4 px-6 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-lg active:scale-95 transition-all"
+                  >
+                    OK
+                  </button>
+                )}
+              </div>
+              {result === 'incorrect' && (
+                <motion.div 
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }}
+                  className="p-6 bg-rose-50 dark:bg-rose-500/10 rounded-3xl border border-rose-100 dark:border-rose-900/30 text-center"
+                >
+                  <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-1">To'g'ri javob</p>
+                  <p className="text-rose-600 dark:text-rose-400 text-2xl font-black">{currentWord?.original}</p>
+                </motion.div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {options.map((opt, i) => {
+                 let stateClass = "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-pink-500 hover:shadow-lg hover:-translate-y-1";
+                 if (result) {
+                   if (opt.id === currentWord?.id) stateClass = "bg-emerald-500 border-emerald-400 text-white shadow-xl scale-[1.02] z-10";
+                   else if (result === 'incorrect' && opt.id !== currentWord?.id) stateClass = "opacity-40 pointer-events-none scale-95";
+                 }
+                 return (
+                   <button
+                     key={i}
+                     onClick={() => handleAnswer(opt)}
+                     disabled={!!result}
+                     className={`p-6 rounded-[2rem] border-2 font-black text-lg transition-all flex items-center justify-center gap-3 ${stateClass}`}
+                   >
+                     {questionType === 'description' ? opt.original : opt.translation}
+                     {result && opt.id === currentWord?.id && <CheckCircle2 className="w-5 h-5" />}
+                   </button>
+                 );
+              })}
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -3255,16 +2905,13 @@ function MatchingMode({ words, setWords, setStats, onBack }: any) {
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [gameState, setGameState] = useState<'start' | 'playing' | 'gameover' | 'won'>('start');
-  const [speed, setSpeed] = useState(4.0); // seconds to fall (faster)
-  const [attemptKey, setAttemptKey] = useState(0);
+  const [speed, setSpeed] = useState(4.0);
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const initialized = useRef(false);
-  const messageRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!initialized.current && words.length > 0) {
-      const shuffled = [...words].sort(() => 0.5 - Math.random());
-      setQueue(shuffled);
+      setQueue([...words].sort(() => 0.5 - Math.random()));
       initialized.current = true;
     }
   }, [words]);
@@ -3272,13 +2919,8 @@ function MatchingMode({ words, setWords, setStats, onBack }: any) {
   useEffect(() => {
     if (gameState === 'playing' && currentIndex < queue.length) {
       const current = queue[currentIndex];
-      const wrongOptions = words
-        .filter((w: Word) => w.id !== current.id)
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 3);
-      const allOptions = [current, ...wrongOptions].sort(() => 0.5 - Math.random());
-      setOptions(allOptions);
-      setAttemptKey(prev => prev + 1);
+      const others = words.filter((w: Word) => w.id !== current.id).sort(() => 0.5 - Math.random()).slice(0, 3);
+      setOptions([current, ...others].sort(() => 0.5 - Math.random()));
       setFeedback(null);
     } else if (gameState === 'playing' && currentIndex >= queue.length) {
       setGameState('won');
@@ -3287,141 +2929,132 @@ function MatchingMode({ words, setWords, setStats, onBack }: any) {
 
   const handleAnswer = (selectedId: string) => {
     if (gameState !== 'playing' || feedback) return;
-    const current = queue[currentIndex];
-    const isCorrect = selectedId === current.id;
-
+    if (selectedId === 'timeout') {
+      handleMistake();
+      return;
+    }
+    const isCorrect = selectedId === queue[currentIndex].id;
     if (isCorrect) {
       setFeedback('correct');
       setScore(s => s + 1);
-      setWords((prev: Word[]) => prev.map(w => w.id === current.id ? updateWordProgress(w, 'matching', true) : w));
-      
-      if (current.status === 'new') {
-        const today = new Date().toISOString().split('T')[0];
-        setStats((prev: any) => {
-          const currentStat = prev[today] || { timeSpent: 0, wordsLearned: 0 };
-          return { ...prev, [today]: { ...currentStat, wordsLearned: currentStat.wordsLearned + 1 } };
-        });
-      }
-
-      setSpeed(s => Math.max(2.5, s * 0.9)); // Speed up faster
-      
-      setTimeout(() => {
-        setCurrentIndex(i => i + 1);
-      }, 300);
+      setWords((prev: Word[]) => prev.map(w => w.id === queue[currentIndex].id ? updateWordProgress(w, 'matching', true) : w));
+      setSpeed(s => Math.max(2.0, s * 0.95));
+      setTimeout(() => setCurrentIndex(i => i + 1), 300);
     } else {
       handleMistake();
     }
   };
 
-  const handleMiss = () => {
-    if (gameState !== 'playing' || feedback) return;
-    handleMistake();
-  };
-
   const handleMistake = () => {
     setFeedback('incorrect');
-    const current = queue[currentIndex];
-    setWords((prev: Word[]) => prev.map(w => w.id === current.id ? updateWordProgress(w, 'matching', false) : w));
-    
+    setWords((prev: Word[]) => prev.map(w => w.id === queue[currentIndex].id ? updateWordProgress(w, 'matching', false) : w));
     setLives(l => {
-      const newLives = l - 1;
-      setTimeout(() => {
-        if (newLives <= 0) {
-          setGameState('gameover');
-        } else {
-          setCurrentIndex(i => i + 1);
-        }
-      }, 500);
-      return newLives;
+      if (l <= 1) { setGameState('gameover'); return 0; }
+      setTimeout(() => setCurrentIndex(i => i + 1), 500);
+      return l - 1;
     });
   };
 
   if (gameState === 'start') {
     return (
-      <div className="max-w-2xl mx-auto text-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-12 rounded-3xl shadow-xl border border-white dark:border-slate-700">
-        <Zap className="w-24 h-24 text-emerald-500 mx-auto mb-6" />
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-4">So'z Yomg'iri</h2>
-        <p className="text-xl text-slate-600 dark:text-slate-400 mb-8">Tepadan tushayotgan inglizcha so'zning to'g'ri o'zbekcha tarjimasini u yerga yetib borguncha toping!</p>
-        <div className="flex justify-center gap-4">
-          <button onClick={onBack} className="px-8 py-4 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">Orqaga</button>
-          <button onClick={() => setGameState('playing')} className="px-8 py-4 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors">Boshlash</button>
-        </div>
+      <div className="max-w-2xl mx-auto text-center py-24 px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl"
+        >
+          <div className="w-24 h-24 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+            <Sparkles className="w-12 h-12 text-emerald-500" />
+          </div>
+          <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-4">So'z Yomg'iri</h2>
+          <p className="text-lg text-slate-500 font-medium mb-12">So'zlar tushib ketmasidan ularning tarjimasini toping! Tezlik va aniqlik muhim.</p>
+          <div className="flex gap-4">
+            <button onClick={onBack} className="flex-1 py-5 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-black rounded-3xl active:scale-95 transition-all">Orqaga</button>
+            <button onClick={() => setGameState('playing')} className="flex-1 py-5 bg-emerald-500 text-white font-black rounded-3xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all">Boshlash</button>
+          </div>
+        </motion.div>
       </div>
     );
   }
 
   if (gameState === 'gameover' || gameState === 'won') {
-    const isWon = gameState === 'won';
-    const percentage = words.length > 0 ? score / words.length : 0;
-    if (!messageRef.current) messageRef.current = getMotivationalMessage(percentage);
-    const message = messageRef.current;
     return (
-      <div className="max-w-2xl mx-auto text-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-12 rounded-3xl shadow-xl border border-white dark:border-slate-700">
-        {isWon ? <Trophy className="w-24 h-24 text-emerald-500 mx-auto mb-6" /> : <XCircle className="w-24 h-24 text-red-500 mx-auto mb-6" />}
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-4">{isWon ? "Ajoyib natija!" : "O'yin tugadi"}</h2>
-        <p className="text-xl text-slate-600 dark:text-slate-400 mb-2">Siz {score} ta so'zni to'g'ri topdingiz.</p>
-        <p className="text-lg text-emerald-600 dark:text-emerald-400 font-medium mb-8">
-          {message}
-        </p>
-        <button onClick={onBack} className="px-8 py-4 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors">Menyuga qaytish</button>
+      <div className="max-w-2xl mx-auto text-center py-24 px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl"
+        >
+          {gameState === 'won' ? <Trophy className="w-24 h-24 text-emerald-500 mx-auto mb-8" /> : <XCircle className="w-24 h-24 text-rose-500 mx-auto mb-8" />}
+          <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-2">{gameState === 'won' ? 'G\'alaba!' : 'O\'yin Tugadi'}</h2>
+          <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-emerald-600 font-black text-2xl">{score} / {queue.length}</span></p>
+          <button onClick={onBack} className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl active:scale-95 transition-all">Menyuga qaytish</button>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-md mx-auto h-[70vh] min-h-[500px] flex flex-col bg-slate-50 dark:bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 relative">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between p-4 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md z-20 border-b border-slate-200 dark:border-slate-700">
-        <button onClick={onBack} className="p-2 bg-slate-100 dark:bg-slate-700 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-slate-600 dark:text-slate-300">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        
-        <div className="flex space-x-1">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Heart key={i} className={`w-6 h-6 ${i < lives ? 'text-red-500 fill-red-500' : 'text-slate-300 dark:text-slate-600'}`} />
+    <div className="max-w-md mx-auto h-[650px] bg-white dark:bg-slate-800 rounded-[3.5rem] border-4 border-slate-100 dark:border-slate-700 overflow-hidden relative flex flex-col shadow-2xl">
+      <div className="p-6 bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl flex justify-between items-center z-10 border-b border-slate-100 dark:border-slate-700">
+        <div className="flex gap-1.5">
+          {[...Array(3)].map((_, i) => (
+            <motion.div
+              animate={{ scale: i < lives ? 1 : 0.8, opacity: i < lives ? 1 : 0.3 }}
+              key={i}
+            >
+              <Heart className={`w-7 h-7 ${i < lives ? 'text-rose-500 fill-rose-500' : 'text-slate-300 dark:text-slate-600'}`} />
+            </motion.div>
           ))}
         </div>
-
-        <div className="text-lg font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-4 py-1.5 rounded-xl">
-          {score} / {queue.length}
+        <div className="px-4 py-1 bg-slate-100 dark:bg-slate-900 rounded-full">
+           <span className="text-sm font-black text-slate-800 dark:text-white">{score} / {queue.length}</span>
         </div>
       </div>
 
-      {/* Game Canvas */}
-      <div className={`flex-1 relative overflow-hidden ${feedback === 'incorrect' ? 'bg-red-50 dark:bg-red-900/20 animate-shake' : feedback === 'correct' ? 'bg-emerald-50 dark:bg-emerald-900/20' : ''} transition-colors duration-300`}>
+      <div className={`flex-1 relative overflow-hidden transition-colors duration-300 ${feedback === 'incorrect' ? 'bg-rose-50/50 dark:bg-rose-900/10' : feedback === 'correct' ? 'bg-emerald-50/50 dark:bg-emerald-900/10' : 'bg-slate-50/30 dark:bg-slate-900/20'}`}>
         <AnimatePresence>
           {!feedback && queue[currentIndex] && (
             <motion.div
-              key={attemptKey}
-              initial={{ top: '-15%', opacity: 0 }}
+              key={currentIndex}
+              initial={{ top: '-10%', opacity: 0 }}
               animate={{ top: '100%', opacity: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
               transition={{ duration: speed, ease: 'linear' }}
-              onAnimationComplete={handleMiss}
-              className="absolute left-1/2 -translate-x-1/2 bg-white dark:bg-slate-800 px-8 py-4 rounded-2xl shadow-xl border-2 border-emerald-500 text-3xl font-black text-slate-800 dark:text-slate-100 z-10 whitespace-nowrap"
+              onAnimationComplete={() => handleAnswer('timeout')}
+              className="absolute left-1/2 -translate-x-1/2"
             >
-              {queue[currentIndex].original}
+              <div className="px-10 py-5 bg-white dark:bg-slate-700 rounded-3xl shadow-2xl border-2 border-emerald-500/30 flex flex-col items-center gap-2">
+                 {queue[currentIndex].emoji && <span className="text-4xl">{queue[currentIndex].emoji}</span>}
+                 <span className="text-3xl font-black text-slate-800 dark:text-white whitespace-nowrap">{queue[currentIndex].original}</span>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
+        
+        {feedback === 'incorrect' && (
+           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center bg-rose-500/10 backdrop-blur-[2px]">
+              <XCircle className="w-24 h-24 text-rose-500" />
+           </motion.div>
+        )}
+        {feedback === 'correct' && (
+           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 flex items-center justify-center bg-emerald-500/10 backdrop-blur-[2px]">
+              <CheckCircle2 className="w-24 h-24 text-emerald-500" />
+           </motion.div>
+        )}
       </div>
 
-      {/* Bottom Options */}
-      <div className="grid grid-cols-2 gap-3 p-4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-t border-slate-200 dark:border-slate-700 z-20">
-        {options.map(opt => (
-          <button
-            key={opt.id}
+      <div className="p-8 grid grid-cols-2 gap-4 bg-white dark:bg-slate-800 z-10 border-t border-slate-100 dark:border-slate-700">
+        {options.map((opt, idx) => (
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            key={opt.id + idx}
             onClick={() => handleAnswer(opt.id)}
             disabled={!!feedback}
-            className={`p-4 rounded-xl shadow-sm text-lg font-bold transition-all border-2 ${
-              feedback && opt.id === queue[currentIndex]?.id
-                ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400'
-                : feedback && opt.id !== queue[currentIndex]?.id
-                  ? 'bg-slate-100 border-slate-200 text-slate-400 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-500 opacity-50'
-                  : 'bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:border-emerald-300 dark:hover:border-emerald-500 hover:shadow-md active:scale-95'
-            }`}
+            className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 font-black text-slate-700 dark:text-white hover:border-emerald-500 hover:bg-white dark:hover:bg-slate-800 transition-all shadow-sm"
           >
             {opt.translation}
-          </button>
+          </motion.button>
         ))}
       </div>
     </div>
@@ -3434,8 +3067,8 @@ function SpellingMode({ words, setWords, setStats, onBack }: any) {
   const [input, setInput] = useState('');
   const [feedback, setFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [score, setScore] = useState(0);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const initialized = useRef(false);
-  const messageRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!initialized.current && words.length > 0) {
@@ -3446,157 +3079,128 @@ function SpellingMode({ words, setWords, setStats, onBack }: any) {
 
   const currentWord = questions[currentIndex];
 
-  const handleCheck = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentWord || feedback) return;
-    
-    const normalizedInput = input.trim().toLowerCase();
-    const normalizedTarget = currentWord.original.trim().toLowerCase();
-    
-    if (normalizedInput === normalizedTarget) {
-      setFeedback('correct');
+  const playWordAudio = () => {
+    if (!currentWord || isGeneratingAudio) return;
+    setIsGeneratingAudio(true);
+    playUniversalTTS(currentWord.original, () => {}, () => setIsGeneratingAudio(false), () => setIsGeneratingAudio(false));
+  };
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (feedback || !input.trim()) return;
+    const isCorrect = input.trim().toLowerCase() === questions[currentIndex].original.toLowerCase();
+    setFeedback(isCorrect ? 'correct' : 'incorrect');
+    if (isCorrect) {
       setScore(s => s + 1);
-      setWords((prev: Word[]) => prev.map(w => w.id === currentWord.id ? updateWordProgress(w, 'spelling', true) : w));
-      
-      if (currentWord.status === 'new') {
-        const today = new Date().toISOString().split('T')[0];
-        setStats((prev: any) => {
-           const currentStat = prev[today] || { timeSpent: 0, wordsLearned: 0 };
-           return { ...prev, [today]: { ...currentStat, wordsLearned: currentStat.wordsLearned + 1 } };
-        });
-      }
+      setWords((prev: Word[]) => prev.map(w => w.id === questions[currentIndex].id ? updateWordProgress(w, 'spelling', true) : w));
     } else {
-      setFeedback('incorrect');
-      setWords((prev: Word[]) => prev.map(w => w.id === currentWord.id ? updateWordProgress(w, 'spelling', false) : w));
+      setWords((prev: Word[]) => prev.map(w => w.id === questions[currentIndex].id ? updateWordProgress(w, 'spelling', false) : w));
     }
   };
 
   const handleNext = () => {
-    setFeedback(null);
-    setInput('');
-    setCurrentIndex(i => i + 1);
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(i => i + 1);
+      setInput('');
+      setFeedback(null);
+    } else {
+      setFeedback('done' as any);
+    }
   };
 
-  if (currentIndex >= questions.length || words.length === 0) {
-    const percentage = questions.length > 0 ? score / questions.length : 0;
-    if (!messageRef.current) messageRef.current = getMotivationalMessage(percentage);
-    const message = messageRef.current;
+  if (questions.length === 0) return null;
+  if (feedback === 'done' as any) {
     return (
-      <div className="max-w-2xl mx-auto text-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-12 rounded-3xl shadow-xl shadow-cyan-100/50 dark:shadow-none border border-white dark:border-slate-700">
-        <Edit3 className="w-24 h-24 text-cyan-500 mx-auto mb-6" />
-        <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-4">Mashq yakunlandi!</h2>
-        <p className="text-xl text-slate-600 dark:text-slate-400 mb-2">Natija: {score} / {questions.length}</p>
-        <p className="text-lg text-emerald-600 dark:text-emerald-400 font-medium mb-8">
-          {message}
-        </p>
-        <button 
-          onClick={onBack}
-          className="px-8 py-4 bg-cyan-600 text-white font-bold rounded-xl hover:bg-cyan-700 transition-colors"
+      <div className="max-w-2xl mx-auto text-center py-24 px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl"
         >
-          Menyuga qaytish
-        </button>
+          <div className="w-24 h-24 bg-cyan-50 dark:bg-cyan-500/10 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+            <Edit3 className="w-12 h-12 text-cyan-500" />
+          </div>
+          <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-2">Mashq Yakunlandi!</h2>
+          <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-cyan-600 font-black text-2xl">{score} / {questions.length}</span></p>
+          <button onClick={onBack} className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl active:scale-95 transition-all">Menyuga qaytish</button>
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
-        <button 
-          onClick={onBack}
-          className="p-2 bg-white/50 dark:bg-slate-800/50 rounded-xl hover:bg-white dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-300"
-        >
+    <div className="max-w-2xl mx-auto space-y-8 pb-20 px-4">
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
-          So'z {currentIndex + 1} / {questions.length}
-        </div>
-        <div className="text-cyan-600 dark:text-cyan-400 font-bold">
-          {score} to'g'ri
-        </div>
-      </div>
-
-      <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-8 rounded-3xl shadow-xl shadow-cyan-100/50 dark:shadow-none border border-white dark:border-slate-700">
-        <div className="mb-8 text-center">
-          <h3 className="text-4xl font-black text-slate-800 dark:text-slate-100 mb-2">{currentWord.translation}</h3>
-          {currentWord.partOfSpeech && (
-            <span className="inline-block px-3 py-1 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 text-sm font-medium rounded-full mb-4">
-              {currentWord.partOfSpeech}
-            </span>
-          )}
-          <p className="text-slate-500 dark:text-slate-400">Inglizcha tarjimasini yozing</p>
-        </div>
-
-        <form onSubmit={handleCheck} className="space-y-6">
-          <div>
-            <input
-              type="text"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              disabled={!!feedback}
-              autoFocus
-              autoComplete="off"
-              className={`w-full text-center text-3xl font-bold p-4 bg-slate-50 dark:bg-slate-900 border-2 rounded-2xl focus:outline-none transition-colors ${
-                feedback === 'correct' 
-                  ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' 
-                  : feedback === 'incorrect'
-                    ? 'border-red-500 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
-                    : 'border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:border-cyan-500'
-              }`}
-              placeholder="Kiriting..."
-            />
+        <div className="flex flex-col items-center">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Jarayon</span>
+          <div className="text-sm font-black text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 px-4 py-1 rounded-full">
+            {currentIndex + 1} / {questions.length}
           </div>
-
-          <AnimatePresence mode="wait">
-            {feedback && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className={`p-4 rounded-xl flex items-center justify-center gap-3 font-bold text-lg ${
-                  feedback === 'correct' 
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' 
-                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                }`}
-              >
-                {feedback === 'correct' ? (
-                  <>
-                    <CheckCircle2 className="w-6 h-6" />
-                    To'g'ri! {currentWord.pronunciation && `[${currentWord.pronunciation}]`}
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="w-6 h-6" />
-                    Xato. To'g'ri javob: <span className="underline ml-1">{currentWord.original}</span>
-                  </>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {!feedback ? (
-            <button
-              type="submit"
-              disabled={!input.trim()}
-              className="w-full py-4 bg-cyan-600 text-white font-bold rounded-xl hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Tekshirish
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleNext}
-              className="w-full py-4 bg-slate-800 dark:bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-700 dark:hover:bg-slate-600 transition-colors"
-            >
-              Keyingisi
-            </button>
-          )}
-        </form>
+        </div>
+        <div className="text-cyan-600 font-black text-lg bg-cyan-50 dark:bg-cyan-500/10 px-4 py-1 rounded-full shadow-sm">
+          {score}
+        </div>
       </div>
+
+      <div className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl text-center relative overflow-hidden group">
+        <div className="absolute inset-0 bg-gradient-to-b from-cyan-50/50 to-transparent dark:from-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        <p className="text-[10px] font-black text-cyan-500 uppercase tracking-[0.3em] mb-8">O'zbekchadan tarjima qiling</p>
+        <h2 className="text-5xl font-black text-slate-800 dark:text-white mb-4 group-hover:scale-105 transition-transform duration-500">{currentWord.translation}</h2>
+        <button 
+          type="button"
+          onClick={playWordAudio} 
+          disabled={isGeneratingAudio}
+          className="mt-6 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 text-cyan-500 hover:bg-cyan-50 transition-all border border-slate-100 dark:border-slate-800 active:scale-90"
+        >
+          {isGeneratingAudio ? <Loader2 className="w-6 h-6 animate-spin" /> : <Volume2 className="w-6 h-6" />}
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="relative">
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            disabled={!!feedback}
+            placeholder="Inglizcha so'zni yozing..."
+            className={`w-full p-8 bg-white dark:bg-slate-800 border-2 rounded-[2.5rem] outline-none font-black text-3xl text-center shadow-xl transition-all ${
+              feedback === 'correct' ? 'border-emerald-500 text-emerald-600' : feedback === 'incorrect' ? 'border-rose-500 text-rose-600' : 'border-slate-100 dark:border-slate-700 focus:border-cyan-500'
+            }`}
+            autoFocus
+          />
+          {input && !feedback && (
+             <motion.button 
+               initial={{ opacity: 0, scale: 0.8 }}
+               animate={{ opacity: 1, scale: 1 }}
+               type="submit"
+               className="absolute right-4 top-4 bottom-4 px-8 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-[1.5rem] shadow-lg active:scale-95 transition-all"
+             >
+               OK
+             </motion.button>
+          )}
+        </div>
+
+        {feedback === 'incorrect' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-8 bg-rose-50 dark:bg-rose-500/10 rounded-[2.5rem] border border-rose-100 dark:border-rose-900/30 text-center"
+          >
+            <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-2">To'g'ri javob</p>
+            <p className="text-rose-600 dark:text-rose-400 text-4xl font-black">{currentWord.original}</p>
+          </motion.div>
+        )}
+        {feedback && (
+          <button type="button" onClick={handleNext} className="w-full py-6 bg-cyan-500 text-white font-black text-xl rounded-[2rem] shadow-lg active:scale-95 transition-all">Keyingisi</button>
+        )}
+      </form>
     </div>
   );
 }
-
 
 function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
   const [examType, setExamType] = useState<'select' | 'new' | 'all'>('select');
@@ -3611,15 +3215,6 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
   const messageRef = useRef<string | null>(null);
 
   const startExam = (type: 'new' | 'all') => {
-    const shuffleArray = (array: any[]) => {
-      const newArray = [...array];
-      for (let i = newArray.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-      }
-      return newArray;
-    };
-
     let eligibleWords = [];
     if (type === 'new') {
       eligibleWords = words.filter((w: Word) => w.status === 'ready_for_exam');
@@ -3627,51 +3222,48 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
       eligibleWords = words.filter((w: Word) => w.status === 'ready_for_exam' || w.status === 'mastered');
     }
     
-    const shuffled = shuffleArray(eligibleWords).slice(0, 10);
+    const shuffled = [...eligibleWords].sort(() => 0.5 - Math.random()).slice(0, 10);
     setExamWords(shuffled);
     setExamType(type);
+    setCurrentIndex(0);
+    setScore(0);
+    setFeedback(null);
+    setShowResult(false);
+    setUserInput('');
+    setTimeLeft(6000);
   };
 
   const currentWord = examWords[currentIndex];
 
   const handleCorrect = useCallback(() => {
+    if (feedback) return;
     setFeedback('correct');
     setScore(s => s + 1);
-    
-    // Add 1 coin for every correct answer
     setCoins((c: number) => c + 1);
-    
-    setWords((prev: Word[]) => prev.map(w => 
-      w.id === currentWord.id ? updateWordProgress(w, 'exam', true) : w
-    ));
-
-    const today = new Date().toISOString().split('T')[0];
-    setStats((prev: Record<string, DailyStats>) => ({
-      ...prev,
-      [today]: {
-        ...prev[today] || { timeSpent: 0, wordsLearned: 0 },
-        wordsLearned: (prev[today]?.wordsLearned || 0) + 1
-      }
-    }));
-  }, [currentWord, setWords, setStats, setCoins]);
+    setWords((prev: Word[]) => prev.map(w => w.id === currentWord.id ? { ...w, status: 'mastered', progress: 100 } : w));
+    setTimeout(handleNext, 1500);
+  }, [currentWord, setWords, setCoins, feedback]);
 
   const handleIncorrect = useCallback(() => {
+    if (feedback) return;
     setFeedback('incorrect');
     setShowAnswer(true);
-    
-    setWords((prev: Word[]) => prev.map(w => 
-      w.id === currentWord.id ? updateWordProgress(w, 'exam', false) : w
-    ));
-  }, [currentWord, setWords]);
+    setWords((prev: Word[]) => prev.map(w => w.id === currentWord.id ? updateWordProgress(w, 'exam', false) : w));
+    setTimeout(handleNext, 2500);
+  }, [currentWord, setWords, feedback]);
 
-  // Auto-submit when typing correctly
-  useEffect(() => {
-    if (feedback === null && currentWord && userInput.trim().toLowerCase() === currentWord.original.toLowerCase()) {
-      handleCorrect();
+  const handleNext = () => {
+    if (currentIndex < examWords.length - 1) {
+      setCurrentIndex(c => c + 1);
+      setUserInput('');
+      setFeedback(null);
+      setShowAnswer(false);
+      setTimeLeft(6000);
+    } else {
+      setShowResult(true);
     }
-  }, [userInput, feedback, currentWord, handleCorrect]);
+  };
 
-  // Timer logic
   useEffect(() => {
     if (examType === 'select' || feedback !== null || showResult || examWords.length === 0) return;
 
@@ -3695,190 +3287,155 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
     const allCount = words.filter((w: Word) => w.status === 'ready_for_exam' || w.status === 'mastered').length;
 
     return (
-      <div className="max-w-2xl mx-auto text-center bg-white dark:bg-slate-800/50 backdrop-blur-xl p-12 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50">
-        <Trophy className="w-24 h-24 text-amber-400 mx-auto mb-6" />
-        <h2 className="text-3xl font-black text-slate-800 dark:text-slate-100 mb-8">Mukammal Test</h2>
-        <div className="grid sm:grid-cols-2 gap-4 mb-8">
-          <button
-            onClick={() => startExam('new')}
-            disabled={newCount === 0}
-            className={`p-6 rounded-2xl border-2 text-left transition-all ${newCount > 0 ? 'border-amber-200 dark:border-amber-900/50 hover:border-amber-400 dark:hover:border-amber-600 bg-amber-50/50 dark:bg-amber-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 opacity-50 cursor-not-allowed'}`}
-          >
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">Yangi so'zlar</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">Faqat testga tayyor bo'lgan yangi so'zlar ({newCount} ta)</p>
-          </button>
-          <button
-            onClick={() => startExam('all')}
-            disabled={allCount === 0}
-            className={`p-6 rounded-2xl border-2 text-left transition-all ${allCount > 0 ? 'border-purple-200 dark:border-purple-900/50 hover:border-purple-400 dark:hover:border-purple-600 bg-purple-50/50 dark:bg-purple-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 opacity-50 cursor-not-allowed'}`}
-          >
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">Barcha so'zlar</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-sm">Tayyor va oldin yodlangan barcha so'zlar ({allCount} ta)</p>
-          </button>
-        </div>
-        <button onClick={onBack} className="px-6 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-          Orqaga
-        </button>
+      <div className="max-w-2xl mx-auto text-center py-24 px-4">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-slate-800 p-12 rounded-[3.5rem] border border-slate-100 dark:border-slate-700 shadow-xl"
+        >
+          <div className="w-24 h-24 bg-amber-50 dark:bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
+            <Trophy className="w-12 h-12 text-amber-500" />
+          </div>
+          <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-8">Mukammal Test</h2>
+          <div className="grid sm:grid-cols-2 gap-4 mb-12">
+            <motion.button 
+              whileHover={{ y: -5 }}
+              onClick={() => startExam('new')} 
+              disabled={newCount === 0} 
+              className={`p-8 rounded-[2.5rem] border-2 text-left transition-all relative overflow-hidden ${newCount > 0 ? 'border-amber-100 bg-amber-50/50 dark:bg-amber-900/10 hover:border-amber-400' : 'border-slate-100 bg-slate-50 dark:bg-slate-800 opacity-50 cursor-not-allowed'}`}
+            >
+              <div className="relative z-10">
+                <h3 className="text-xl font-black text-amber-700 dark:text-amber-400 mb-1">Yangi so'zlar</h3>
+                <p className="text-sm text-amber-600/70 font-bold">{newCount} ta so'z tayyor</p>
+              </div>
+              <Sparkles className="absolute -bottom-2 -right-2 w-16 h-16 text-amber-500/10" />
+            </motion.button>
+            <motion.button 
+              whileHover={{ y: -5 }}
+              onClick={() => startExam('all')} 
+              disabled={allCount === 0} 
+              className={`p-8 rounded-[2.5rem] border-2 text-left transition-all relative overflow-hidden ${allCount > 0 ? 'border-purple-100 bg-purple-50/50 dark:bg-purple-900/10 hover:border-purple-400' : 'border-slate-100 bg-slate-50 dark:bg-slate-800 opacity-50 cursor-not-allowed'}`}
+            >
+              <div className="relative z-10">
+                <h3 className="text-xl font-black text-purple-700 dark:text-purple-400 mb-1">Barcha so'zlar</h3>
+                <p className="text-sm text-purple-600/70 font-bold">{allCount} ta so'z jami</p>
+              </div>
+              <Layers className="absolute -bottom-2 -right-2 w-16 h-16 text-purple-500/10" />
+            </motion.button>
+          </div>
+          <button onClick={onBack} className="w-full py-5 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-black rounded-3xl active:scale-95 transition-all">Orqaga</button>
+        </motion.div>
       </div>
     );
   }
-
-  if (examWords.length === 0) {
-    return (
-      <div className="text-center py-20 bg-white dark:bg-slate-800/50 backdrop-blur-xl rounded-3xl border border-slate-100 dark:border-slate-700/50 shadow-sm max-w-2xl mx-auto">
-        <Trophy className="w-16 h-16 text-slate-200 dark:text-slate-700 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-slate-700 dark:text-slate-200 mb-2">Testga tayyor so'zlar yo'q</h2>
-        <p className="text-slate-500 dark:text-slate-400 mb-6">Mukammal test topshirish uchun avval so'zlarni boshqa mashqlarda o'rganing.</p>
-        <button onClick={onBack} className="px-6 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-          Orqaga
-        </button>
-      </div>
-    );
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userInput.trim() || feedback !== null) return;
-
-    const isCorrect = userInput.trim().toLowerCase() === currentWord.original.toLowerCase();
-    if (isCorrect) {
-      handleCorrect();
-    } else {
-      handleIncorrect();
-    }
-  };
-
-  const handleNext = () => {
-    if (currentIndex < examWords.length - 1) {
-      setCurrentIndex(c => c + 1);
-      setUserInput('');
-      setFeedback(null);
-      setShowAnswer(false);
-      setTimeLeft(6000);
-    } else {
-      setShowResult(true);
-    }
-  };
-
-  const displayTime = Math.ceil(timeLeft / 1000);
 
   if (showResult) {
-    const earnedCoins = score; // Every correct word = 1 coin
-
     const percentage = examWords.length > 0 ? score / examWords.length : 0;
     if (!messageRef.current) messageRef.current = getMotivationalMessage(percentage);
     const message = messageRef.current;
 
     return (
-      <div className="max-w-2xl mx-auto text-center bg-white dark:bg-slate-800/50 backdrop-blur-xl p-12 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50">
-        <Trophy className="w-24 h-24 text-amber-400 mx-auto mb-6" />
-        <h2 className="text-4xl font-black text-slate-800 dark:text-slate-100 mb-4">Test Yakunlandi!</h2>
-        <p className="text-xl text-slate-600 dark:text-slate-300 mb-4">
-          Siz {examWords.length} ta so'zdan <span className="font-bold text-amber-500">{score}</span> tasini to'g'ri topdingiz.
-        </p>
-        {earnedCoins > 0 && (
-          <p className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center justify-center gap-2">
-            <span className="text-3xl">🪙</span> +{earnedCoins} tanga jamg'ardingiz!
-          </p>
-        )}
-        <p className="text-lg text-emerald-600 dark:text-emerald-400 font-medium mb-8">
-          {message}
-        </p>
-        <button 
-          onClick={onBack}
-          className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-8 py-4 rounded-xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+      <div className="max-w-2xl mx-auto text-center py-24 px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-slate-900 dark:bg-white p-12 rounded-[4rem] shadow-2xl relative overflow-hidden"
         >
-          Menyuga qaytish
-        </button>
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/20 to-transparent" />
+          <div className="relative z-10">
+            <Trophy className="w-24 h-24 text-amber-400 mx-auto mb-8 animate-bounce" />
+            <h2 className="text-5xl font-black text-white dark:text-slate-900 mb-4">Test Yakunlandi!</h2>
+            <div className="flex justify-center gap-8 mb-12">
+               <div className="text-center">
+                  <p className="text-white/40 dark:text-slate-400 text-xs font-bold uppercase mb-1">Natija</p>
+                  <p className="text-white dark:text-slate-900 text-3xl font-black">{score} / {examWords.length}</p>
+               </div>
+               <div className="text-center">
+                  <p className="text-white/40 dark:text-slate-400 text-xs font-bold uppercase mb-1">Tangalar</p>
+                  <p className="text-amber-400 text-3xl font-black">+{score}</p>
+               </div>
+            </div>
+            <p className="text-amber-400/80 font-bold mb-12 text-lg italic">"{message}"</p>
+            <button onClick={onBack} className="w-full py-6 bg-amber-400 text-slate-900 font-black rounded-[2rem] shadow-xl hover:bg-amber-300 transition-all active:scale-95">Menyuga qaytish</button>
+          </div>
+        </motion.div>
       </div>
     );
   }
 
+  const displayTime = Math.ceil(timeLeft / 1000);
+
   return (
-    <div className="max-w-2xl mx-auto mt-4">
-      <div className="bg-white dark:bg-slate-800/50 backdrop-blur-xl p-8 md:p-12 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700/50 text-center relative overflow-hidden">
-        {/* Timer Progress Bar */}
-        <div className="absolute top-0 left-0 w-full h-2 bg-slate-100 dark:bg-slate-700">
-          <div 
-            className={`h-full ${timeLeft <= 1500 ? 'bg-red-500' : 'bg-amber-500'}`}
-            style={{ width: `${(timeLeft / 6000) * 100}%`, transition: feedback !== null ? 'none' : 'width 50ms linear' }}
-          />
-        </div>
-        
-        <div className="flex items-center justify-between mb-8 mt-2">
-          <button onClick={onBack} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+    <div className="max-w-2xl mx-auto space-y-8 pb-20 px-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
             <ArrowLeft className="w-6 h-6" />
           </button>
-          
-          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-slate-50 dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 shadow-sm">
-            <span className={`text-xl font-black ${timeLeft <= 1500 ? 'text-red-500 animate-pulse' : 'text-slate-600 dark:text-slate-300'}`}>
-              {displayTime}
-            </span>
+          <div className={`px-4 py-1 rounded-full font-black text-lg shadow-sm transition-colors ${displayTime <= 2 ? 'bg-rose-500 text-white animate-pulse' : 'bg-amber-50 dark:bg-amber-500/10 text-amber-500'}`}>
+            {displayTime}s
           </div>
-
-          <div className="text-slate-500 dark:text-slate-400 font-medium bg-slate-50 dark:bg-slate-800 px-4 py-1.5 rounded-full border border-slate-100 dark:border-slate-700">
+        </div>
+        <div className="flex flex-col items-center">
+          <div className="text-sm font-black text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 px-6 py-1.5 rounded-full">
             {currentIndex + 1} / {examWords.length}
           </div>
         </div>
-
-        <div className="mb-8 mt-4">
-          <p className="text-sm font-bold text-amber-500 uppercase tracking-wider mb-4 flex items-center justify-center gap-2">
-            <Sparkles className="w-4 h-4" /> Mukammal Test
-          </p>
-          <h3 className="text-4xl font-black text-slate-800 dark:text-slate-100 mb-2">{currentWord.translation}</h3>
-          {currentWord.uzbekExplanation && (
-            <p className="text-slate-500 dark:text-slate-400 italic">{currentWord.uzbekExplanation}</p>
-          )}
+        <div className="text-amber-500 font-black text-xl flex items-center gap-2">
+           <Trophy className="w-5 h-5" /> {score}
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="mb-8">
+      <div className="bg-white dark:bg-slate-800 p-12 rounded-[4rem] border-4 border-slate-100 dark:border-slate-700 shadow-2xl text-center relative overflow-hidden group">
+        <div className="absolute top-0 left-0 h-2 bg-amber-500 transition-all duration-100" style={{ width: `${(timeLeft / 6000) * 100}%` }} />
+        <div className="absolute inset-0 bg-gradient-to-b from-amber-50/50 to-transparent dark:from-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        
+        <p className="text-[10px] font-black text-amber-500 uppercase tracking-[0.3em] mb-8">Mukammal imtihon</p>
+        <h2 className="text-5xl font-black text-slate-800 dark:text-white mb-6 group-hover:scale-105 transition-transform duration-500">{currentWord.translation}</h2>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Inglizcha tarjimasini yozing</p>
+      </div>
+
+      <form 
+        onSubmit={(e) => { 
+          e.preventDefault(); 
+          if (userInput.trim().toLowerCase() === currentWord.original.toLowerCase()) handleCorrect(); 
+          else handleIncorrect(); 
+        }} 
+        className="space-y-6"
+      >
+        <div className="relative">
           <input
             type="text"
             value={userInput}
-            onChange={(e) => setUserInput(e.target.value)}
-            disabled={feedback !== null}
-            placeholder="Inglizcha tarjimasini yozing..."
-            className={`w-full text-center text-2xl px-6 py-4 rounded-2xl border-2 outline-none transition-all ${
-              feedback === 'correct' ? 'bg-lime-50 dark:bg-lime-900/20 border-lime-400 text-lime-700 dark:text-lime-400' :
-              feedback === 'incorrect' ? 'bg-red-50 dark:bg-red-900/20 border-red-400 text-red-700 dark:text-red-400' :
-              'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/20'
+            onChange={e => setUserInput(e.target.value)}
+            disabled={!!feedback}
+            placeholder="Bu yerga yozing..."
+            className={`w-full p-8 bg-white dark:bg-slate-800 border-4 rounded-[3rem] outline-none font-black text-3xl text-center shadow-2xl transition-all ${
+              feedback === 'correct' ? 'border-emerald-500 text-emerald-600' : feedback === 'incorrect' ? 'border-rose-500 text-rose-600' : 'border-slate-100 dark:border-slate-700 focus:border-amber-500'
             }`}
             autoFocus
           />
-          
-          {feedback === null && (
-            <button type="submit" className="mt-4 w-full py-4 bg-amber-500 text-white font-bold rounded-xl hover:bg-amber-600 transition-colors">
-              Tekshirish
-            </button>
+          {userInput && !feedback && (
+             <button 
+              type="submit"
+              className="absolute right-6 top-6 bottom-6 px-10 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-[2rem] shadow-xl active:scale-95"
+             >
+               OK
+             </button>
           )}
-        </form>
-
-        {feedback === 'correct' && (
-          <div className="mb-6 p-4 bg-lime-100 dark:bg-lime-900/30 text-lime-700 dark:text-lime-400 rounded-xl flex items-center justify-center gap-3 border border-lime-200 dark:border-lime-800/30 animate-bounce">
-            <Sparkles className="w-6 h-6 shrink-0" />
-            <p className="font-bold text-lg">Qoyilmaqom! So'zni yodladingiz!</p>
-          </div>
-        )}
+        </div>
 
         {showAnswer && (
-          <div className="mb-6 p-6 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-900/30 text-left">
-            <p className="text-red-600 dark:text-red-400 font-bold mb-2 flex items-center gap-2">
-              <XCircle className="w-5 h-5" /> Noto'g'ri. To'g'ri javob:
-            </p>
-            <p className="text-3xl font-black text-slate-800 dark:text-slate-100 mb-1">{currentWord.original}</p>
-            {currentWord.pronunciation && <p className="text-slate-500 dark:text-slate-400">[{currentWord.pronunciation}]</p>}
-          </div>
-        )}
-
-        {feedback !== null && (
-          <button 
-            onClick={handleNext}
-            className="w-full py-4 bg-slate-800 dark:bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-900 dark:hover:bg-slate-600 transition-colors"
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-8 bg-rose-50 dark:bg-rose-500/10 rounded-[3rem] border border-rose-100 dark:border-rose-900/30 text-center"
           >
-            {currentIndex < examWords.length - 1 ? "Keyingi so'z" : "Natijani ko'rish"}
-          </button>
+            <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-2">To'g'ri javob</p>
+            <p className="text-rose-600 dark:text-rose-400 text-4xl font-black">{currentWord.original}</p>
+          </motion.div>
         )}
-      </div>
+      </form>
     </div>
   );
 }
