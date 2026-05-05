@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", sans-serif;
+  --font-sans: "Nunito Sans", sans-serif;
   
   --color-primary-400: #818CF8;
   --color-primary-500: #6366F1;
@@ -18,6 +18,11 @@
   --color-danger: #EF4444;
   
   --color-background: #F8FAFF;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
 }
 
 @custom-variant dark (&:where(.dark, .dark *));

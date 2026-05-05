@@ -468,6 +468,78 @@ const getLocalDate = (d?: Date | number | string) => {
   return `${year}-${month}-${day}`;
 };
 
+function OnboardingScreen({ onStart, onGoogleLogin }: { onStart: () => void, onGoogleLogin: () => void }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#2D1B69] to-[#5135FF] flex flex-col items-center justify-between p-6 relative overflow-hidden font-sans">
+      {/* Stars Background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[10%] left-[15%] w-1.5 h-1.5 bg-white/60 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.8)] animate-pulse" />
+        <div className="absolute top-[25%] right-[20%] w-2 h-2 bg-yellow-300/80 rounded-full shadow-[0_0_10px_rgba(253,224,71,0.8)] animate-pulse delay-300" />
+        <div className="absolute top-[40%] left-[25%] w-1 h-1 bg-white/40 rounded-full animate-pulse delay-700" />
+        <div className="absolute top-[15%] right-[30%] text-white/50 text-xs animate-pulse delay-500">✦</div>
+        <div className="absolute top-[35%] right-[10%] text-yellow-300/60 text-sm animate-pulse delay-1000">✦</div>
+        <div className="absolute top-[50%] left-[10%] text-white/40 text-xs animate-pulse delay-150">✦</div>
+      </div>
+      
+      {/* Cloud Shapes at Bottom */}
+      <div className="absolute bottom-0 left-0 w-full h-[40%] bg-gradient-to-t from-[#6042FF] to-transparent opacity-80 pointer-events-none" style={{ clipPath: 'ellipse(150% 100% at 50% 100%)' }} />
+      <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[40%] bg-[#5638FF] rounded-[100%] opacity-90 blur-xl pointer-events-none" />
+      <div className="absolute bottom-[-5%] right-[-10%] w-[70%] h-[45%] bg-[#6D4EFF] rounded-[100%] opacity-90 blur-xl pointer-events-none" />
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col items-center justify-center w-full z-10 mt-10">
+        <motion.div 
+          initial={{ y: 50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="relative w-full max-w-[280px] aspect-square flex items-center justify-center"
+        >
+          <img src="/rocket.png" alt="Rocket" className="w-full h-full object-contain drop-shadow-2xl animate-[float_6s_ease-in-out_infinite]" />
+        </motion.div>
+        
+        <motion.div 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="text-center mt-6"
+        >
+          <h1 className="text-6xl font-[900] text-white tracking-tight mb-4" style={{ fontFamily: '"Nunito Sans", sans-serif' }}>oooson</h1>
+          <p className="text-white/90 text-xl font-medium max-w-[260px] mx-auto leading-relaxed">
+            Inglizcha so'z yodlash endi oson
+          </p>
+        </motion.div>
+      </div>
+
+      {/* Bottom Section */}
+      <motion.div 
+        initial={{ y: 30, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.6 }}
+        className="w-full max-w-sm flex flex-col items-center z-10 mb-8"
+      >
+        <div className="flex gap-2 mb-8">
+          <div className="w-2.5 h-2.5 rounded-full bg-white"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-white/30"></div>
+          <div className="w-2.5 h-2.5 rounded-full bg-white/30"></div>
+        </div>
+        
+        <button 
+          onClick={onStart}
+          className="w-full py-4 bg-white text-[#4F46E5] text-lg font-bold rounded-2xl shadow-[0_8px_30px_rgba(255,255,255,0.2)] hover:scale-[1.02] active:scale-95 transition-all"
+        >
+          Boshlash
+        </button>
+        <button 
+          onClick={onGoogleLogin}
+          className="mt-6 text-white/60 text-sm font-semibold hover:text-white transition-colors py-2 px-4 rounded-xl border border-transparent hover:border-white/20 hover:bg-white/5"
+        >
+          Google orqali kirish
+        </button>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -1007,6 +1079,22 @@ function BackgroundBlobs() {
         </div>
       </div>
     );
+  }
+
+  // Handle Google Login specifically for the Onboarding screen
+  const handleGoogleLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Google login error:", error);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  if (!user && isAuthReady && !isLoggingIn) {
+    return <OnboardingScreen onStart={handleLogin} onGoogleLogin={handleGoogleLogin} />;
   }
 
   return (
