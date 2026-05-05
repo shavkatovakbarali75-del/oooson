@@ -8,7 +8,16 @@ import { signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User }
 import { collection, doc, setDoc, getDoc, getDocs, onSnapshot, query, where, deleteDoc, orderBy, limit, getDocFromServer } from 'firebase/firestore';
 
 // Initialize Gemini
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Initialize Gemini safely
+let ai: any = null;
+try {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey && apiKey !== 'undefined') {
+    ai = new GoogleGenAI(apiKey);
+  }
+} catch (e) {
+  console.error("Gemini initialization failed:", e);
+}
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
 
 // Telegram WebApp integration
@@ -537,6 +546,13 @@ export default function App() {
   const totalLearned = useMemo(() => words.filter(w => w.status === 'mastered').length, [words]);
   const isAdmin = userProfile?.role === 'admin' || user?.email === 'shavkatovakbarali75@gmail.com';
 
+  // Auto-login for Telegram Mini App users
+  useEffect(() => {
+    if (tg && isAuthReady && !user && !isLoggingIn) {
+      handleLogin();
+    }
+  }, [isAuthReady, user, isLoggingIn]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -941,6 +957,24 @@ function BackgroundBlobs() {
     </div>
   );
 }
+
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-[#0b0b0d] flex flex-col items-center justify-center gap-6">
+        <motion.div 
+          animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+          transition={{ duration: 3, repeat: Infinity }}
+          className="w-24 h-24 bg-primary-500/20 rounded-[2rem] flex items-center justify-center border border-primary-500/30"
+        >
+          <Logo className="w-16 h-16" />
+        </motion.div>
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">Yuklanmoqda...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={isDarkMode ? 'dark' : ''}>
