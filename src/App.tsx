@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { Plus, Image as ImageIcon, Volume2, Search, BookOpen, Trash2, ArrowRight, ArrowLeft, List, Play, Loader2, Compass, ShoppingBag, Plane, Coffee, Briefcase, GraduationCap, Trophy, Sparkles, CheckCircle2, Dumbbell, BarChart2, CheckCircle, XCircle, Timer, Award, Target, Zap, Moon, Sun, Flame, Download, Upload, Mic, UserCircle, LogOut, Edit3, Save, X, Camera, Keyboard, Layers, Link as LinkIcon, Eye, Heart, Gamepad2, Ghost, Skull, Lock, Crown, Users, PieChart, Clock, Star, Book, Shield, Bell, LayoutGrid } from 'lucide-react';
+import { Plus, Image as ImageIcon, Volume2, Search, BookOpen, Trash2, ArrowRight, ArrowLeft, List, Play, Loader2, Compass, ShoppingBag, Plane, Coffee, Briefcase, GraduationCap, Trophy, Sparkles, CheckCircle2, Dumbbell, BarChart2, CheckCircle, XCircle, Timer, Award, Target, Zap, Moon, Sun, Flame, Download, Upload, Mic, UserCircle, LogOut, Edit3, Save, X, Camera, Keyboard, Layers, Link as LinkIcon, Eye, Heart, Gamepad2, Ghost, Skull, Lock, Crown, Users, PieChart, Clock, Star, Book, Shield, Bell, LayoutGrid, Mail, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import { auth, db, googleProvider, handleFirestoreError, OperationType } from './firebase';
@@ -301,9 +301,9 @@ function ProfileModal({
   userProfile: UserProfile | null, 
   onClose: () => void 
 }) {
-  const [displayName, setDisplayName] = useState(userProfile?.displayName || user.displayName || '');
+  const [displayName, setDisplayName] = useState(userProfile?.displayName || user?.displayName || '');
   const [bio, setBio] = useState(userProfile?.bio || '');
-  const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || user.photoURL || '');
+  const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || user?.photoURL || '');
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -395,7 +395,7 @@ function ProfileModal({
                   <img src={photoURL} alt="Profile" className="w-full h-full rounded-full object-cover bg-white dark:bg-slate-800" />
                 ) : (
                   <div className="w-full h-full rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-500 font-bold text-3xl">
-                    {(displayName || user.email || '?').charAt(0).toUpperCase()}
+                    {(displayName || user?.email || '?').charAt(0).toUpperCase()}
                   </div>
                 )}
               </div>
@@ -540,10 +540,124 @@ function OnboardingScreen({ onStart, onGoogleLogin }: { onStart: () => void, onG
   );
 }
 
+function LoginScreen({ onLogin, onGoogleLogin }: { onLogin: () => void, onGoogleLogin: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-[#F5F7FF] flex flex-col relative overflow-hidden font-sans">
+      {/* Background Skyline & Clouds */}
+      <div className="absolute bottom-0 left-0 w-full h-[40%] pointer-events-none opacity-40">
+        <svg viewBox="0 0 1440 320" className="absolute bottom-0 w-full h-auto text-indigo-300 fill-current" preserveAspectRatio="none">
+          <path d="M0,288L48,272C96,256,192,224,288,218.7C384,213,480,235,576,224C672,213,768,171,864,165.3C960,160,1056,192,1152,213.3C1248,235,1344,245,1392,250.7L1440,256L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
+        </svg>
+        <div className="absolute bottom-0 w-full h-[20%] bg-indigo-300"></div>
+        {/* Placeholder for generic skyline if needed, but clouds usually suffice for a soft look */}
+      </div>
+
+      <div className="flex-1 flex flex-col px-6 pt-12 pb-8 z-10 max-w-md mx-auto w-full">
+        {/* Header Section */}
+        <div className="flex justify-between items-start mb-8">
+          <div className="flex-1">
+            <h1 className="text-4xl font-[900] text-[#6366F1] tracking-tight mb-6" style={{ fontFamily: '"Nunito Sans", sans-serif' }}>oooson</h1>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">Xush kelibsiz! 👋</h2>
+            <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-[200px]">
+              Inglizcha so'zlarni oson va qiziqarli usulda o'rganishni davom ettiring.
+            </p>
+          </div>
+          <div className="w-32 h-32 shrink-0 relative">
+            <img src="/login_lement.png" alt="Welcome Illustration" className="w-full h-full object-contain drop-shadow-xl animate-[float_4s_ease-in-out_infinite]" />
+          </div>
+        </div>
+
+        {/* Login Form */}
+        <div className="space-y-5 mb-8">
+          <div className="space-y-1.5">
+            <label className="text-xs font-black text-slate-700 ml-1">Email manzilingiz</label>
+            <div className="relative group">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-400 group-focus-within:text-[#6366F1] transition-colors" />
+              <input 
+                type="email" 
+                placeholder="email@example.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full pl-12 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:border-[#6366F1] focus:ring-4 focus:ring-[#6366F1]/10 outline-none transition-all shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-end ml-1">
+              <label className="text-xs font-black text-slate-700">Parol</label>
+              <button className="text-xs font-bold text-[#6366F1] hover:underline">Parolni unutdingiz?</button>
+            </div>
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-400 group-focus-within:text-[#6366F1] transition-colors" />
+              <input 
+                type={showPassword ? "text" : "password"} 
+                placeholder="Parol kiriting"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="w-full pl-12 pr-12 py-3.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-medium focus:border-[#6366F1] focus:ring-4 focus:ring-[#6366F1]/10 outline-none transition-all shadow-sm"
+              />
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+
+          <button 
+            onClick={onLogin}
+            className="w-full mt-2 py-4 bg-[#6366F1] text-white text-base font-black rounded-xl shadow-[0_8px_20px_rgba(99,102,241,0.3)] hover:bg-[#4F46E5] active:scale-[0.98] transition-all"
+          >
+            Kirish
+          </button>
+        </div>
+
+        {/* Social Login */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="flex-1 h-px bg-slate-200"></div>
+          <span className="text-xs font-bold text-slate-400">yoki</span>
+          <div className="flex-1 h-px bg-slate-200"></div>
+        </div>
+
+        <div className="space-y-3">
+          <button 
+            onClick={onGoogleLogin}
+            className="w-full flex items-center justify-center gap-3 py-3.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 active:scale-[0.98] transition-all"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            Google orqali kirish
+          </button>
+          
+          <button 
+            className="w-full flex items-center justify-center gap-3 py-3.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 active:scale-[0.98] transition-all"
+          >
+            <svg viewBox="0 0 24 24" className="w-5 h-5 text-black" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.05 2.53.68 3.14.68.65 0 1.95-.76 3.44-.65 1.25.04 2.53.47 3.41 1.5-3.32 1.77-2.73 6.22.5 7.42-.61 1.54-1.55 3.06-2.49 4.02zm-3.58-14c-.16-1.53 1.05-3.04 2.44-3.28 1.14 1.83-.93 3.41-2.44 3.28z"/></svg>
+            Apple orqali kirish
+          </button>
+        </div>
+
+        <div className="mt-auto pt-6 text-center">
+          <p className="text-xs font-bold text-slate-500">
+            Hisobingiz yo'qmi? <button className="text-[#6366F1] hover:underline ml-1">Ro'yxatdan o'tish</button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [authStep, setAuthStep] = useState<'onboarding' | 'login'>('onboarding');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showForceStart, setShowForceStart] = useState(false);
@@ -676,8 +790,8 @@ export default function App() {
             };
             
             // Prefer Telegram user info if available (for seamless guest login)
-            let displayName = tgUser ? `${tgUser.first_name} ${tgUser.last_name || ''}`.trim() : currentUser.displayName;
-            let photoURL = tgUser?.photo_url || currentUser.photoURL;
+            let displayName = tgUser ? `${tgUser.first_name} ${tgUser.last_name || ''}`.trim() : currentUser?.displayName;
+            let photoURL = tgUser?.photo_url || currentUser?.photoURL;
             let phone = undefined;
 
             if (tgUser) {
@@ -725,8 +839,8 @@ export default function App() {
               wordsLearned: userData.wordsLearned || 0,
               streak: streak
             };
-            if (userData.displayName || currentUser.displayName) publicPayload.displayName = userData.displayName || currentUser.displayName;
-            if (userData.photoURL || currentUser.photoURL) publicPayload.photoURL = userData.photoURL || currentUser.photoURL;
+            if (userData.displayName || currentUser?.displayName) publicPayload.displayName = userData.displayName || currentUser?.displayName;
+            if (userData.photoURL || currentUser?.photoURL) publicPayload.photoURL = userData.photoURL || currentUser?.photoURL;
             if (userData.bio) publicPayload.bio = userData.bio;
             await setDoc(publicRef, publicPayload, { merge: true });
           }
@@ -898,10 +1012,10 @@ export default function App() {
         };
         // Prefer firestore profile data if it exists, otherwise fallback to auth user
         if (userProfile?.displayName) publicPayload.displayName = userProfile.displayName;
-        else if (user.displayName) publicPayload.displayName = user.displayName;
+        else if (user?.displayName) publicPayload.displayName = user?.displayName;
         
         if (userProfile?.photoURL) publicPayload.photoURL = userProfile.photoURL;
-        else if (user.photoURL) publicPayload.photoURL = user.photoURL;
+        else if (user?.photoURL) publicPayload.photoURL = user?.photoURL;
 
         setDoc(doc(db, 'users', user.uid), { wordsLearned: totalLearned }, { merge: true })
           .catch(e => handleFirestoreError(e, OperationType.WRITE, `users/${user.uid}`));
@@ -932,10 +1046,10 @@ export default function App() {
         const publicPayload: any = { uid: user.uid, coins: next };
         // Prefer firestore profile data if it exists, otherwise fallback to auth user
         if (userProfile?.displayName) publicPayload.displayName = userProfile.displayName;
-        else if (user.displayName) publicPayload.displayName = user.displayName;
+        else if (user?.displayName) publicPayload.displayName = user?.displayName;
         
         if (userProfile?.photoURL) publicPayload.photoURL = userProfile.photoURL;
-        else if (user.photoURL) publicPayload.photoURL = user.photoURL;
+        else if (user?.photoURL) publicPayload.photoURL = user?.photoURL;
         
         setDoc(doc(db, 'public_profiles', user.uid), publicPayload, { merge: true })
           .catch(e => handleFirestoreError(e, OperationType.WRITE, `public_profiles/${user.uid}`));
@@ -1009,7 +1123,7 @@ export default function App() {
             let newCount = parsed.lastActive === yesterday ? parsed.count + 1 : 1;
             
             // Temporary fix for the reported timezone bug that dropped the streak
-            if (user && user.email === 'shavkatovakbarali75@gmail.com' && today === '2026-05-04' && newCount < 3) {
+            if (user && user?.email === 'shavkatovakbarali75@gmail.com' && today === '2026-05-04' && newCount < 3) {
               newCount = 3;
             }
 
@@ -1023,7 +1137,7 @@ export default function App() {
             }
             
             return newCount;
-          } else if (user && user.email === 'shavkatovakbarali75@gmail.com' && today === '2026-05-04' && parsed.count < 3) {
+          } else if (user && user?.email === 'shavkatovakbarali75@gmail.com' && today === '2026-05-04' && parsed.count < 3) {
             // Fix if they already logged in today and it saved as 1
             const newCount = 3;
             const streakData = { count: newCount, lastActive: today };
@@ -1094,7 +1208,10 @@ function BackgroundBlobs() {
   };
 
   if (!user && isAuthReady && !isLoggingIn) {
-    return <OnboardingScreen onStart={handleLogin} onGoogleLogin={handleGoogleLogin} />;
+    if (authStep === 'onboarding') {
+      return <OnboardingScreen onStart={() => setAuthStep('login')} onGoogleLogin={handleGoogleLogin} />;
+    }
+    return <LoginScreen onLogin={handleLogin} onGoogleLogin={handleGoogleLogin} />;
   }
 
   return (
@@ -1133,11 +1250,11 @@ function BackgroundBlobs() {
                     className="group flex items-center shrink-0"
                   >
                     <div className="w-10 h-10 rounded-2xl p-0.5 bg-gradient-to-br from-primary-400 to-secondary-600 group-hover:shadow-lg group-hover:shadow-primary-500/20 transition-all">
-                      {userProfile?.photoURL || user.photoURL ? (
-                        <img src={userProfile?.photoURL || user.photoURL || ''} alt="Profile" className="w-full h-full rounded-[0.85rem] object-cover bg-white dark:bg-slate-900" />
+                      {userProfile?.photoURL || user?.photoURL ? (
+                        <img src={userProfile?.photoURL || user?.photoURL || ''} alt="Profile" className="w-full h-full rounded-[0.85rem] object-cover bg-white dark:bg-slate-900" />
                       ) : (
                         <div className="w-full h-full rounded-[0.85rem] bg-white dark:bg-slate-900 flex items-center justify-center text-primary-500 font-black text-sm">
-                          {(userProfile?.displayName || user.displayName || user.email || '?').charAt(0).toUpperCase()}
+                          {(userProfile?.displayName || user?.displayName || user?.email || '?').charAt(0).toUpperCase()}
                         </div>
                       )}
                     </div>
@@ -2299,11 +2416,11 @@ function ProfileTab({ words, stats, userProfile, streak, user, onEditProfile }: 
         <div className="relative mb-6">
           <div className="w-32 h-32 rounded-xl p-1 bg-gradient-to-br from-primary-400 to-secondary-600 shadow-2xl">
             <div className="w-full h-full rounded-[2.3rem] overflow-hidden bg-white dark:bg-slate-900 border-4 border-white dark:border-slate-800">
-              {userProfile?.photoURL || user.photoURL ? (
-                <img src={userProfile?.photoURL || user.photoURL || ''} alt="Profile" className="w-full h-full object-cover" />
+              {userProfile?.photoURL || user?.photoURL ? (
+                <img src={userProfile?.photoURL || user?.photoURL || ''} alt="Profile" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-primary-500 text-white text-4xl font-black">
-                  {(userProfile?.displayName || user.displayName || '?')[0]}
+                  {(userProfile?.displayName || user?.displayName || '?')[0]}
                 </div>
               )}
             </div>
@@ -2314,7 +2431,7 @@ function ProfileTab({ words, stats, userProfile, streak, user, onEditProfile }: 
         </div>
 
         <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-1">
-          {userProfile?.displayName || user.displayName || 'Bilimdon'}
+          {userProfile?.displayName || user?.displayName || 'Bilimdon'}
         </h2>
         <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-primary-50 dark:bg-primary-500/10 rounded-full mb-8">
           <Trophy className="w-3.5 h-3.5 text-primary-500" />
