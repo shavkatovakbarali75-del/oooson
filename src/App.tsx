@@ -377,7 +377,7 @@ function ProfileModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl w-full max-w-md overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-700">
           <div className="flex flex-col">
             <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Profil</h2>
@@ -983,7 +983,7 @@ function BackgroundBlobs() {
         <motion.div 
           animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
           transition={{ duration: 3, repeat: Infinity }}
-          className="w-24 h-24 bg-primary-500/20 rounded-[2rem] flex items-center justify-center border border-primary-500/30"
+          className="w-24 h-24 bg-primary-500/20 rounded-xl flex items-center justify-center border border-primary-500/30"
         >
           <Logo className="w-16 h-16" />
         </motion.div>
@@ -998,7 +998,7 @@ function BackgroundBlobs() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               onClick={() => setIsAuthReady(true)}
-              className="mt-4 px-6 py-3 bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-bold rounded-2xl border border-white/10 transition-all flex items-center gap-2"
+              className="mt-4 px-4 py-3 bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-bold rounded-2xl border border-white/10 transition-all flex items-center gap-2"
             >
               <Zap className="w-4 h-4 text-primary-500" />
               <span>Kutishni to'xtatish</span>
@@ -1068,13 +1068,13 @@ function BackgroundBlobs() {
           </div>
         </header>
         {/* Bottom Navigation */}
-        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-lg bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/20 dark:border-slate-800/50 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.1)] sm:bottom-8">
+        <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-lg bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-white/20 dark:border-slate-800/50 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] sm:bottom-8">
           <div className="flex items-center justify-between px-3 py-2">
             {[
               { id: 'home' as const, icon: Compass, label: 'Asosiy' },
               { id: 'list' as const, icon: Book, label: "Lug'at" },
               { id: 'topics' as const, icon: Sparkles, label: 'Kashfiyot' },
-              { id: 'practice' as const, icon: Zap, label: 'Mashq' },
+              { id: 'practice' as const, icon: Zap, label: 'Yodlash' },
               { id: 'profile' as const, icon: UserCircle, label: 'Profil' },
               ...(isAdmin ? [{ id: 'admin' as const, icon: Shield, label: 'Admin' }] : []),
             ].map(tab => {
@@ -1142,7 +1142,7 @@ function BackgroundBlobs() {
             initial={{ opacity: 0, scale: 0.5, y: 50 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.5, y: 50 }}
-            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 border-2 border-white/20 backdrop-blur-xl"
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border-2 border-white/20 backdrop-blur-xl"
           >
             <div className="bg-white/20 p-3 rounded-2xl">
               <Trophy className="w-8 h-8 text-yellow-300 animate-bounce" />
@@ -1206,7 +1206,7 @@ function HomeTab({ words, userProfile, streak, coins, setActiveTab }: { words: W
       </header>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-gradient-to-br from-orange-400 to-rose-500 p-0.5 rounded-[2rem] shadow-lg shadow-orange-500/20 group transition-all hover:scale-[1.02]">
+        <div className="bg-gradient-to-br from-orange-400 to-rose-500 p-0.5 rounded-xl shadow-lg shadow-orange-500/20 group transition-all hover:scale-[1.02]">
           <div className="bg-white dark:bg-slate-900 rounded-[1.9rem] p-5 flex items-center gap-4 h-full">
             <div className="w-12 h-12 rounded-2xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
               <Flame className="w-6 h-6 text-orange-500 animate-pulse" />
@@ -1217,7 +1217,7 @@ function HomeTab({ words, userProfile, streak, coins, setActiveTab }: { words: W
             </div>
           </div>
         </div>
-        <div className="bg-gradient-to-br from-amber-400 to-yellow-600 p-0.5 rounded-[2rem] shadow-lg shadow-amber-500/20 group transition-all hover:scale-[1.02]">
+        <div className="bg-gradient-to-br from-amber-400 to-yellow-600 p-0.5 rounded-xl shadow-lg shadow-amber-500/20 group transition-all hover:scale-[1.02]">
           <div className="bg-white dark:bg-slate-900 rounded-[1.9rem] p-5 flex items-center gap-4 h-full">
             <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center text-2xl">
               🪙
@@ -1230,7 +1230,7 @@ function HomeTab({ words, userProfile, streak, coins, setActiveTab }: { words: W
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none relative overflow-hidden group">
+      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none relative overflow-hidden group">
         <div className="relative z-10">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -1254,7 +1254,7 @@ function HomeTab({ words, userProfile, streak, coins, setActiveTab }: { words: W
 
           <button 
             onClick={() => setActiveTab('practice')}
-            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl transition-all active:scale-[0.98] hover:shadow-primary-500/20 flex items-center justify-center gap-3 group"
+            className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl transition-all active:scale-[0.98] hover:shadow-primary-500/20 flex items-center justify-center gap-3 group"
           >
             Mashqni boshlash
             <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -1264,7 +1264,7 @@ function HomeTab({ words, userProfile, streak, coins, setActiveTab }: { words: W
       </div>
 
       {wordOfTheDay && (
-        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[3rem] p-8 text-white shadow-2xl shadow-indigo-500/30">
+        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-5 text-white shadow-2xl shadow-indigo-500/30">
           <div className="relative z-10 flex flex-col items-center text-center">
             <p className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.3em] mb-4">Kun so'zi</p>
             <span className="text-5xl mb-4">{wordOfTheDay.emoji || '📖'}</span>
@@ -1296,7 +1296,7 @@ function HomeTab({ words, userProfile, streak, coins, setActiveTab }: { words: W
             <button 
               key={i}
               onClick={() => setActiveTab(action.id as any)}
-              className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all active:scale-95 flex flex-col items-center gap-4 group"
+              className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl transition-all active:scale-95 flex flex-col items-center gap-4 group"
             >
               <div className={`w-16 h-16 rounded-[1.5rem] ${action.bg} flex items-center justify-center group-hover:scale-110 transition-transform`}>
                 <action.icon className={`w-8 h-8 ${action.color}`} />
@@ -1385,7 +1385,7 @@ function TopicsTab({ words, setWords }: { words: Word[], setWords: React.Dispatc
         <p className="text-slate-500 font-medium">AI yordamida har qanday mavzuda so'zlar kashf qiling.</p>
       </header>
 
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
+      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <div className="space-y-8">
           <div>
             <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-4 ml-1">Mashhur mavzular</h3>
@@ -1394,7 +1394,7 @@ function TopicsTab({ words, setWords }: { words: Word[], setWords: React.Dispatc
                 <button
                   key={topic.id}
                   onClick={() => { setSelectedTopic(topic.id); setCustomTopic(''); }}
-                  className={`relative p-5 rounded-[2rem] border-2 transition-all flex flex-col items-center gap-4 group overflow-hidden ${
+                  className={`relative p-5 rounded-xl border-2 transition-all flex flex-col items-center gap-4 group overflow-hidden ${
                     selectedTopic === topic.id 
                       ? 'border-primary-500 bg-primary-50/30 dark:bg-primary-500/10' 
                       : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/50 hover:border-slate-200 dark:hover:border-slate-700'
@@ -1423,7 +1423,7 @@ function TopicsTab({ words, setWords }: { words: Word[], setWords: React.Dispatc
                 placeholder="Masalan: 'Kosmos', 'Tibbiyot', 'Kriptovalyuta'..."
                 value={customTopic}
                 onChange={(e) => { setCustomTopic(e.target.value); setSelectedTopic(null); }}
-                className="w-full pl-14 pr-6 py-5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-3xl text-sm font-bold focus:border-primary-500 outline-none transition-all placeholder:text-slate-400"
+                className="w-full pl-14 pr-6 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-sm font-bold focus:border-primary-500 outline-none transition-all placeholder:text-slate-400"
               />
             </div>
           </div>
@@ -1454,7 +1454,7 @@ function TopicsTab({ words, setWords }: { words: Word[], setWords: React.Dispatc
           <button
             onClick={handleGenerate}
             disabled={isGenerating || (!selectedTopic && !customTopic.trim())}
-            className="w-full py-5 bg-primary-500 hover:bg-primary-600 text-white font-black rounded-2xl shadow-xl shadow-primary-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
+            className="w-full py-3.5 bg-primary-500 hover:bg-primary-600 text-white font-black rounded-2xl shadow-xl shadow-primary-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale"
           >
             {isGenerating ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
             {isGenerating ? "AI kashf qilmoqda..." : "Yangi so'zlarni kashf qilish"}
@@ -1485,7 +1485,7 @@ function TopicsTab({ words, setWords }: { words: Word[], setWords: React.Dispatc
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: idx * 0.05 }}
                   key={idx} 
-                  className="bg-white dark:bg-slate-800 p-5 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-4 group hover:shadow-xl transition-all"
+                  className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-4 group hover:shadow-xl transition-all"
                 >
                   <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">
                     {word.emoji}
@@ -1626,7 +1626,7 @@ function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dis
         </div>
       </header>
 
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
+      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none">
         <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] mb-6 ml-1">Yangi so'z qo'shish</h3>
         <form onSubmit={handleAddWord} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1636,7 +1636,7 @@ function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dis
                 placeholder="Inglizcha so'z *" 
                 value={newOriginal} 
                 onChange={e => setNewOriginal(e.target.value)} 
-                className="w-full pl-6 pr-14 py-5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-3xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
+                className="w-full pl-6 pr-14 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
                 required 
               />
               <button 
@@ -1653,14 +1653,61 @@ function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dis
               placeholder="O'zbekcha tarjimasi *" 
               value={newTranslation} 
               onChange={e => setNewTranslation(e.target.value)} 
-              className="w-full px-6 py-5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-3xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
+              className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
               required 
             />
           </div>
+          <AnimatePresence>
+            {(newPronunciation || newDescription || newUzbekExplanation) && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-hidden"
+              >
+                <input 
+                  type="text" 
+                  placeholder="Talaffuzi (masalan: /ˈæp.əl/)" 
+                  value={newPronunciation} 
+                  onChange={e => setNewPronunciation(e.target.value)} 
+                  className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
+                />
+                <input 
+                  type="text" 
+                  placeholder="So'z turkumi (noun, verb...)" 
+                  value={newPartOfSpeech} 
+                  onChange={e => setNewPartOfSpeech(e.target.value)} 
+                  className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
+                />
+                <input 
+                  type="text" 
+                  placeholder="Emoji" 
+                  value={newEmoji} 
+                  onChange={e => setNewEmoji(e.target.value)} 
+                  className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
+                />
+                <input 
+                  type="text" 
+                  placeholder="Inglizcha ta'rifi" 
+                  value={newDescription} 
+                  onChange={e => setNewDescription(e.target.value)} 
+                  className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-sm font-bold focus:border-primary-500 outline-none transition-all" 
+                />
+                <div className="sm:col-span-2">
+                  <textarea 
+                    placeholder="O'zbekcha batafsil izoh" 
+                    value={newUzbekExplanation} 
+                    onChange={e => setNewUzbekExplanation(e.target.value)} 
+                    className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl text-sm font-bold focus:border-primary-500 outline-none transition-all min-h-[80px]" 
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <button 
             type="submit" 
             disabled={!newOriginal.trim() || !newTranslation.trim()} 
-            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50"
+            className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 disabled:opacity-50"
           >
             <Plus className="w-6 h-6" /> Lug'atga qo'shish
           </button>
@@ -1707,7 +1754,7 @@ function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dis
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.2 }}
                 key={word.id} 
-                className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-5 group hover:shadow-xl hover:border-primary-500/30 transition-all"
+                className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-5 group hover:shadow-xl hover:border-primary-500/30 transition-all"
               >
                 <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform shadow-inner">
                   {word.emoji || '📖'}
@@ -1740,7 +1787,7 @@ function DictionaryTab({ words, setWords }: { words: Word[], setWords: React.Dis
             ))}
           </AnimatePresence>
           {filteredWords.length === 0 && (
-            <div className="py-24 text-center bg-white dark:bg-slate-800 rounded-[3rem] border-2 border-dashed border-slate-100 dark:border-slate-800">
+            <div className="py-24 text-center bg-white dark:bg-slate-800 rounded-2xl border-2 border-dashed border-slate-100 dark:border-slate-800">
               <div className="w-20 h-20 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Search className="w-10 h-10 text-slate-300" />
               </div>
@@ -1808,7 +1855,7 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
 
   if (words.length === 0) {
     return (
-      <div className="text-center py-20 bg-white/80 backdrop-blur-xl rounded-3xl border border-white shadow-xl shadow-indigo-100/50">
+      <div className="text-center py-20 bg-white/80 backdrop-blur-xl rounded-2xl border border-white shadow-xl shadow-indigo-100/50">
         <Trophy className="w-16 h-16 text-slate-200 mx-auto mb-4" />
         <h2 className="text-2xl font-bold text-slate-700 mb-2">Lug'at bo'sh</h2>
         <p className="text-slate-500">Yodlashni boshlash uchun avval so'z qo'shing.</p>
@@ -1869,7 +1916,7 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 pb-20">
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-primary-50 dark:bg-primary-500/10 flex items-center justify-center">
             <BookOpen className="w-6 h-6 text-primary-500" />
@@ -1899,7 +1946,7 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
         >
           {/* Front */}
           <div className="absolute inset-0 backface-hidden bg-white dark:bg-slate-800 rounded-[3.5rem] shadow-xl border border-slate-100 dark:border-slate-700 p-12 flex flex-col items-center justify-center text-center group">
-            <div className="absolute top-8 left-8">
+            <div className="absolute top-5 left-8">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 dark:bg-slate-900 px-3 py-1 rounded-full">{currentWord.partOfSpeech || 'word'}</span>
             </div>
             
@@ -1911,7 +1958,7 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
               {isSpeaking ? <Loader2 className="w-6 h-6 animate-spin" /> : <Volume2 className="w-6 h-6" />}
             </button>
 
-            <div className="w-32 h-32 rounded-[2.5rem] bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-7xl mb-8 group-hover:scale-110 transition-transform">
+            <div className="w-32 h-32 rounded-xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-7xl mb-8 group-hover:scale-110 transition-transform">
               {currentWord.emoji || '📖'}
             </div>
             
@@ -1929,7 +1976,7 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
           >
             <h2 className="text-5xl font-black mb-8 drop-shadow-lg">{currentWord.translation}</h2>
             {currentWord.uzbekExplanation && (
-              <div className="bg-white/10 backdrop-blur-md p-6 rounded-3xl border border-white/20 max-w-sm">
+              <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 max-w-sm">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-white/60 mb-2">Izoh</p>
                 <p className="text-lg font-medium leading-relaxed">{currentWord.uzbekExplanation}</p>
               </div>
@@ -1940,20 +1987,20 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
       </div>
 
       <div className="flex items-center justify-center gap-6">
-        <button onClick={handlePrev} className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-primary-500 hover:scale-110 active:scale-95 transition-all shadow-sm">
+        <button onClick={handlePrev} className="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-primary-500 hover:scale-110 active:scale-95 transition-all shadow-sm">
           <ArrowLeft className="w-6 h-6" />
         </button>
         
         <button 
           onClick={fetchExamples}
           disabled={isLoadingExamples || !!examples}
-          className="px-10 py-5 bg-primary-500 text-white font-bold rounded-3xl shadow-lg hover:shadow-primary-500/25 hover:scale-105 active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
+          className="px-10 py-3.5 bg-primary-500 text-white font-bold rounded-2xl shadow-lg hover:shadow-primary-500/25 hover:scale-105 active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
         >
           {isLoadingExamples ? <Loader2 className="w-6 h-6 animate-spin" /> : <Sparkles className="w-6 h-6" />}
           Misollar ko'rish
         </button>
 
-        <button onClick={handleNext} className="p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-primary-500 hover:scale-110 active:scale-95 transition-all shadow-sm">
+        <button onClick={handleNext} className="p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 hover:text-primary-500 hover:scale-110 active:scale-95 transition-all shadow-sm">
           <ArrowRight className="w-6 h-6" />
         </button>
       </div>
@@ -1963,7 +2010,7 @@ function StudyTab({ words, setWords }: { words: Word[], setWords: React.Dispatch
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm"
+            className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm"
           >
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
               <Search className="w-5 h-5 text-primary-500" />
@@ -2012,28 +2059,28 @@ function AdminTab() {
   return (
     <div className="space-y-6 pb-20">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Foydalanuvchilar</p>
           <div className="flex items-center justify-between">
             <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{users.length}</p>
             <Users className="w-5 h-5 text-blue-500" />
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Faol Seriyalar</p>
           <div className="flex items-center justify-between">
             <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{activeStreakUsers}</p>
             <Flame className="w-5 h-5 text-orange-500" />
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Yodlangan</p>
           <div className="flex items-center justify-between">
             <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{totalWords}</p>
             <GraduationCap className="w-5 h-5 text-indigo-500" />
           </div>
         </div>
-        <div className="bg-white dark:bg-slate-800 p-5 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Jami Tangalar</p>
           <div className="flex items-center justify-between">
             <p className="text-2xl font-black text-slate-800 dark:text-slate-100">{totalCoins}</p>
@@ -2042,7 +2089,7 @@ function AdminTab() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Shield className="w-5 h-5 text-primary-500" />
@@ -2064,17 +2111,17 @@ function AdminTab() {
           <table className="w-full text-left">
             <thead className="bg-slate-50 dark:bg-slate-900/50">
               <tr>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Foydalanuvchi</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Tanga</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">So'zlar</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">O't</th>
-                <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Sana</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Foydalanuvchi</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Tanga</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">So'zlar</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">O't</th>
+                <th className="px-4 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Sana</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {filteredUsers.map(u => (
                 <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
                         {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-slate-400">{u.displayName?.[0]}</div>}
@@ -2085,10 +2132,10 @@ function AdminTab() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-center font-bold text-amber-500 text-sm">{u.coins || 0}</td>
-                  <td className="px-6 py-4 text-center font-bold text-primary-500 text-sm">{u.wordsLearned || 0}</td>
-                  <td className="px-6 py-4 text-center font-bold text-orange-500 text-sm">{u.streak || 0}</td>
-                  <td className="px-6 py-4 text-right text-[10px] font-bold text-slate-400">
+                  <td className="px-4 py-4 text-center font-bold text-amber-500 text-sm">{u.coins || 0}</td>
+                  <td className="px-4 py-4 text-center font-bold text-primary-500 text-sm">{u.wordsLearned || 0}</td>
+                  <td className="px-4 py-4 text-center font-bold text-orange-500 text-sm">{u.streak || 0}</td>
+                  <td className="px-4 py-4 text-right text-[10px] font-bold text-slate-400">
                     {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'}
                   </td>
                 </tr>
@@ -2154,7 +2201,7 @@ function ProfileTab({ words, stats, userProfile, streak, user, onEditProfile }: 
 
   return (
     <div className="space-y-8 pb-12">
-      <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col items-center text-center relative overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-none flex flex-col items-center text-center relative overflow-hidden">
         <div className="absolute top-6 right-6">
           <button onClick={onEditProfile} className="w-10 h-10 rounded-2xl bg-slate-50 dark:bg-slate-900 text-slate-400 hover:text-primary-500 transition-all flex items-center justify-center">
             <Edit3 className="w-5 h-5" />
@@ -2162,7 +2209,7 @@ function ProfileTab({ words, stats, userProfile, streak, user, onEditProfile }: 
         </div>
         
         <div className="relative mb-6">
-          <div className="w-32 h-32 rounded-[2.5rem] p-1 bg-gradient-to-br from-primary-400 to-secondary-600 shadow-2xl">
+          <div className="w-32 h-32 rounded-xl p-1 bg-gradient-to-br from-primary-400 to-secondary-600 shadow-2xl">
             <div className="w-full h-full rounded-[2.3rem] overflow-hidden bg-white dark:bg-slate-900 border-4 border-white dark:border-slate-800">
               {userProfile?.photoURL || user.photoURL ? (
                 <img src={userProfile?.photoURL || user.photoURL || ''} alt="Profile" className="w-full h-full object-cover" />
@@ -2203,7 +2250,7 @@ function ProfileTab({ words, stats, userProfile, streak, user, onEditProfile }: 
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
           <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-500/10 flex items-center justify-center">
               <PieChart className="w-5 h-5 text-primary-500" />
@@ -2228,7 +2275,7 @@ function ProfileTab({ words, stats, userProfile, streak, user, onEditProfile }: 
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
           <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6 flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center">
               <Users className="w-5 h-5 text-amber-500" />
@@ -2264,7 +2311,7 @@ function PracticeTab({ words, setWords, setStats, setCoins }: { words: Word[], s
 
   if (words.length < 5) {
     return (
-      <div className="text-center py-24 px-4 bg-white dark:bg-slate-800 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm max-w-2xl mx-auto">
+      <div className="text-center py-24 px-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm max-w-2xl mx-auto">
         <div className="w-24 h-24 bg-slate-50 dark:bg-slate-900 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
           <Dumbbell className="w-12 h-12 text-slate-300" />
         </div>
@@ -2299,7 +2346,7 @@ function PracticeTab({ words, setWords, setStats, setCoins }: { words: Word[], s
               transition={{ delay: idx * 0.05 }}
               key={m.id}
               onClick={() => setMode(m.id as any)}
-              className={`p-8 rounded-[3.5rem] border-2 transition-all text-left group relative overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 ${
+              className={`p-5 rounded-[3.5rem] border-2 transition-all text-left group relative overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-1 ${
                 m.premium 
                 ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white' 
                 : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-primary-500/50'
@@ -2323,12 +2370,12 @@ function PracticeTab({ words, setWords, setStats, setCoins }: { words: Word[], s
             </motion.button>
           ))}
         </div>
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-700 shadow-sm">
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2">
             <Target className="w-6 h-6 text-primary-500" />
             Yodlash tizimi haqida
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div className="space-y-4">
               <div className="flex items-start gap-4">
                 <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0 mt-1 font-bold">1</div>
@@ -2424,7 +2471,7 @@ function QuizMode({ words, setWords, setStats, onBack }: any) {
           <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-indigo-600 font-black text-2xl">{score} / {questions.length}</span></p>
           <button 
             onClick={onBack} 
-            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl transition-all active:scale-[0.98]"
+            className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl transition-all active:scale-[0.98]"
           >
             Menyuga qaytish
           </button>
@@ -2485,7 +2532,7 @@ function QuizMode({ words, setWords, setStats, onBack }: any) {
                   key={opt.id}
                   onClick={() => handleAnswer(opt.id)}
                   disabled={!!selectedAnswer}
-                  className={`p-6 rounded-[2.5rem] border-2 font-black text-lg transition-all flex items-center justify-between ${stateClass}`}
+                  className={`p-6 rounded-xl border-2 font-black text-lg transition-all flex items-center justify-between ${stateClass}`}
                 >
                   {opt.translation}
                   <div className="flex items-center">
@@ -2577,7 +2624,7 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
           <p className="text-lg text-emerald-600 dark:text-emerald-400 font-bold mb-12">{message}</p>
           <button 
             onClick={onBack} 
-            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl transition-all active:scale-[0.98]"
+            className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl transition-all active:scale-[0.98]"
           >
             Menyuga qaytish
           </button>
@@ -2613,7 +2660,7 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
         >
           {/* Front */}
           <div className="absolute w-full h-full backface-hidden bg-white dark:bg-slate-800 rounded-[3.5rem] shadow-2xl border-2 border-slate-50 dark:border-slate-700 flex flex-col items-center justify-center p-12 text-center">
-            <div className="absolute top-8 left-8 w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-300">
+            <div className="absolute top-5 left-8 w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-300">
               <Eye className="w-6 h-6" />
             </div>
             {currentWord.emoji && <span className="text-8xl mb-8 group-hover:scale-110 transition-transform duration-500">{currentWord.emoji}</span>}
@@ -2621,7 +2668,7 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
               {currentWord.original}
             </h2>
             {currentWord.pronunciation && (
-              <div className="px-6 py-2 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
+              <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900 rounded-full border border-slate-100 dark:border-slate-800">
                 <p className="text-lg font-bold text-slate-400 font-mono">[{currentWord.pronunciation}]</p>
               </div>
             )}
@@ -2639,7 +2686,7 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
                 {currentWord.translation}
               </h2>
               {currentWord.uzbekExplanation && (
-                <div className="p-6 bg-white/5 dark:bg-slate-900/5 rounded-3xl border border-white/10 dark:border-slate-900/10 w-full">
+                <div className="p-6 bg-white/5 dark:bg-slate-900/5 rounded-2xl border border-white/10 dark:border-slate-900/10 w-full">
                   <p className="text-slate-400 dark:text-slate-500 text-sm font-bold leading-relaxed">
                     {currentWord.uzbekExplanation}
                   </p>
@@ -2663,14 +2710,14 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
               <button 
                 onClick={(e) => { e.stopPropagation(); setIsFlipped(true); }}
                 disabled={isTransitioning}
-                className="flex-1 bg-white dark:bg-slate-800 text-slate-400 font-black rounded-3xl border-2 border-slate-100 dark:border-slate-700 hover:border-blue-500 hover:text-blue-500 transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95 shadow-sm"
+                className="flex-1 bg-white dark:bg-slate-800 text-slate-400 font-black rounded-2xl border-2 border-slate-100 dark:border-slate-700 hover:border-blue-500 hover:text-blue-500 transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95 shadow-sm"
               >
                 <Eye className="w-6 h-6" /> Bilmayman
               </button>
               <button 
                 onClick={(e) => { e.stopPropagation(); handleNext(true); }}
                 disabled={isTransitioning}
-                className="flex-1 bg-emerald-500 text-white font-black rounded-3xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-500/20 disabled:opacity-50 active:scale-95"
+                className="flex-1 bg-emerald-500 text-white font-black rounded-2xl hover:bg-emerald-600 transition-all flex items-center justify-center gap-3 shadow-xl shadow-emerald-500/20 disabled:opacity-50 active:scale-95"
               >
                 <CheckCircle2 className="w-6 h-6" /> Bilaman
               </button>
@@ -2686,7 +2733,7 @@ function FlashcardsMode({ words, setWords, setStats, onBack }: any) {
               <button 
                 onClick={(e) => { e.stopPropagation(); handleNext(false); }}
                 disabled={isTransitioning}
-                className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95"
+                className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95"
               >
                 Keyingi so'z <ArrowRight className="w-6 h-6" />
               </button>
@@ -2822,7 +2869,7 @@ function ListeningMode({ words, setWords, setStats, onBack }: any) {
           <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-pink-600 font-black text-2xl">{score} / {totalQuestions}</span></p>
           <button 
             onClick={onBack} 
-            className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl transition-all active:scale-[0.98]"
+            className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl transition-all active:scale-[0.98]"
           >
             Menyuga qaytish
           </button>
@@ -2856,7 +2903,7 @@ function ListeningMode({ words, setWords, setStats, onBack }: any) {
         <button
           onClick={playAudio}
           disabled={isPlaying || isGeneratingAudio}
-          className={`w-36 h-36 rounded-[2.5rem] flex items-center justify-center mx-auto transition-all relative z-10 ${
+          className={`w-36 h-36 rounded-xl flex items-center justify-center mx-auto transition-all relative z-10 ${
             isPlaying || isGeneratingAudio ? 'bg-pink-500 text-white scale-110 shadow-2xl shadow-pink-500/40' : 'bg-slate-50 dark:bg-slate-900 text-pink-500 hover:bg-pink-50 shadow-inner'
           }`}
         >
@@ -2905,7 +2952,7 @@ function ListeningMode({ words, setWords, setStats, onBack }: any) {
                   onChange={e => setUserInput(e.target.value)}
                   disabled={!!result}
                   placeholder="Shu yerga yozing..."
-                  className={`w-full p-8 bg-white dark:bg-slate-800 border-2 rounded-[2rem] outline-none font-black text-2xl text-center shadow-sm transition-all ${
+                  className={`w-full p-5 bg-white dark:bg-slate-800 border-2 rounded-xl outline-none font-black text-2xl text-center shadow-sm transition-all ${
                     result === 'correct' ? 'border-emerald-500 text-emerald-600' : result === 'incorrect' ? 'border-rose-500 text-rose-600' : 'border-slate-100 dark:border-slate-700 focus:border-pink-500'
                   }`}
                   autoFocus
@@ -2914,7 +2961,7 @@ function ListeningMode({ words, setWords, setStats, onBack }: any) {
                 {!result && (
                   <button 
                     onClick={checkDictation}
-                    className="absolute right-4 top-4 bottom-4 px-6 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-lg active:scale-95 transition-all"
+                    className="absolute right-4 top-4 bottom-4 px-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-lg active:scale-95 transition-all"
                   >
                     OK
                   </button>
@@ -2924,7 +2971,7 @@ function ListeningMode({ words, setWords, setStats, onBack }: any) {
                 <motion.div 
                   initial={{ opacity: 0 }} 
                   animate={{ opacity: 1 }}
-                  className="p-6 bg-rose-50 dark:bg-rose-500/10 rounded-3xl border border-rose-100 dark:border-rose-900/30 text-center"
+                  className="p-6 bg-rose-50 dark:bg-rose-500/10 rounded-2xl border border-rose-100 dark:border-rose-900/30 text-center"
                 >
                   <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-1">To'g'ri javob</p>
                   <p className="text-rose-600 dark:text-rose-400 text-2xl font-black">{currentWord?.original}</p>
@@ -2944,7 +2991,7 @@ function ListeningMode({ words, setWords, setStats, onBack }: any) {
                      key={i}
                      onClick={() => handleAnswer(opt)}
                      disabled={!!result}
-                     className={`p-6 rounded-[2rem] border-2 font-black text-lg transition-all flex items-center justify-center gap-3 ${stateClass}`}
+                     className={`p-6 rounded-xl border-2 font-black text-lg transition-all flex items-center justify-center gap-3 ${stateClass}`}
                    >
                      {questionType === 'description' ? opt.original : opt.translation}
                      {result && opt.id === currentWord?.id && <CheckCircle2 className="w-5 h-5" />}
@@ -3030,8 +3077,8 @@ function MatchingMode({ words, setWords, setStats, onBack }: any) {
           <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-4">So'z Yomg'iri</h2>
           <p className="text-lg text-slate-500 font-medium mb-12">So'zlar tushib ketmasidan ularning tarjimasini toping! Tezlik va aniqlik muhim.</p>
           <div className="flex gap-4">
-            <button onClick={onBack} className="flex-1 py-5 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-black rounded-3xl active:scale-95 transition-all">Orqaga</button>
-            <button onClick={() => setGameState('playing')} className="flex-1 py-5 bg-emerald-500 text-white font-black rounded-3xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all">Boshlash</button>
+            <button onClick={onBack} className="flex-1 py-3.5 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-black rounded-2xl active:scale-95 transition-all">Orqaga</button>
+            <button onClick={() => setGameState('playing')} className="flex-1 py-3.5 bg-emerald-500 text-white font-black rounded-2xl shadow-xl shadow-emerald-500/20 active:scale-95 transition-all">Boshlash</button>
           </div>
         </motion.div>
       </div>
@@ -3049,7 +3096,7 @@ function MatchingMode({ words, setWords, setStats, onBack }: any) {
           {gameState === 'won' ? <Trophy className="w-24 h-24 text-emerald-500 mx-auto mb-8" /> : <XCircle className="w-24 h-24 text-rose-500 mx-auto mb-8" />}
           <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-2">{gameState === 'won' ? 'G\'alaba!' : 'O\'yin Tugadi'}</h2>
           <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-emerald-600 font-black text-2xl">{score} / {queue.length}</span></p>
-          <button onClick={onBack} className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl active:scale-95 transition-all">Menyuga qaytish</button>
+          <button onClick={onBack} className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl active:scale-95 transition-all">Menyuga qaytish</button>
         </motion.div>
       </div>
     );
@@ -3085,7 +3132,7 @@ function MatchingMode({ words, setWords, setStats, onBack }: any) {
               onAnimationComplete={() => handleAnswer('timeout')}
               className="absolute left-1/2 -translate-x-1/2"
             >
-              <div className="px-10 py-5 bg-white dark:bg-slate-700 rounded-3xl shadow-2xl border-2 border-emerald-500/30 flex flex-col items-center gap-2">
+              <div className="px-10 py-3.5 bg-white dark:bg-slate-700 rounded-2xl shadow-2xl border-2 border-emerald-500/30 flex flex-col items-center gap-2">
                  {queue[currentIndex].emoji && <span className="text-4xl">{queue[currentIndex].emoji}</span>}
                  <span className="text-3xl font-black text-slate-800 dark:text-white whitespace-nowrap">{queue[currentIndex].original}</span>
               </div>
@@ -3105,14 +3152,14 @@ function MatchingMode({ words, setWords, setStats, onBack }: any) {
         )}
       </div>
 
-      <div className="p-8 grid grid-cols-2 gap-4 bg-white dark:bg-slate-800 z-10 border-t border-slate-100 dark:border-slate-700">
+      <div className="p-5 grid grid-cols-2 gap-4 bg-white dark:bg-slate-800 z-10 border-t border-slate-100 dark:border-slate-700">
         {options.map((opt, idx) => (
           <motion.button
             whileTap={{ scale: 0.95 }}
             key={opt.id + idx}
             onClick={() => handleAnswer(opt.id)}
             disabled={!!feedback}
-            className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 font-black text-slate-700 dark:text-white hover:border-emerald-500 hover:bg-white dark:hover:bg-slate-800 transition-all shadow-sm"
+            className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 font-black text-slate-700 dark:text-white hover:border-emerald-500 hover:bg-white dark:hover:bg-slate-800 transition-all shadow-sm"
           >
             {opt.translation}
           </motion.button>
@@ -3183,7 +3230,7 @@ function SpellingMode({ words, setWords, setStats, onBack }: any) {
           </div>
           <h2 className="text-4xl font-black text-slate-800 dark:text-white mb-2">Mashq Yakunlandi!</h2>
           <p className="text-lg text-slate-500 font-medium mb-12">Natijangiz: <span className="text-cyan-600 font-black text-2xl">{score} / {questions.length}</span></p>
-          <button onClick={onBack} className="w-full py-5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-3xl shadow-xl active:scale-95 transition-all">Menyuga qaytish</button>
+          <button onClick={onBack} className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-2xl shadow-xl active:scale-95 transition-all">Menyuga qaytish</button>
         </motion.div>
       </div>
     );
@@ -3228,7 +3275,7 @@ function SpellingMode({ words, setWords, setStats, onBack }: any) {
             onChange={e => setInput(e.target.value)}
             disabled={!!feedback}
             placeholder="Inglizcha so'zni yozing..."
-            className={`w-full p-8 bg-white dark:bg-slate-800 border-2 rounded-[2.5rem] outline-none font-black text-3xl text-center shadow-xl transition-all ${
+            className={`w-full p-5 bg-white dark:bg-slate-800 border-2 rounded-xl outline-none font-black text-3xl text-center shadow-xl transition-all ${
               feedback === 'correct' ? 'border-emerald-500 text-emerald-600' : feedback === 'incorrect' ? 'border-rose-500 text-rose-600' : 'border-slate-100 dark:border-slate-700 focus:border-cyan-500'
             }`}
             autoFocus
@@ -3249,14 +3296,14 @@ function SpellingMode({ words, setWords, setStats, onBack }: any) {
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-8 bg-rose-50 dark:bg-rose-500/10 rounded-[2.5rem] border border-rose-100 dark:border-rose-900/30 text-center"
+            className="p-5 bg-rose-50 dark:bg-rose-500/10 rounded-xl border border-rose-100 dark:border-rose-900/30 text-center"
           >
             <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-2">To'g'ri javob</p>
             <p className="text-rose-600 dark:text-rose-400 text-4xl font-black">{currentWord.original}</p>
           </motion.div>
         )}
         {feedback && (
-          <button type="button" onClick={handleNext} className="w-full py-6 bg-cyan-500 text-white font-black text-xl rounded-[2rem] shadow-lg active:scale-95 transition-all">Keyingisi</button>
+          <button type="button" onClick={handleNext} className="w-full py-6 bg-cyan-500 text-white font-black text-xl rounded-xl shadow-lg active:scale-95 transition-all">Keyingisi</button>
         )}
       </form>
     </div>
@@ -3363,7 +3410,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
               whileHover={{ y: -5 }}
               onClick={() => startExam('new')} 
               disabled={newCount === 0} 
-              className={`p-8 rounded-[2.5rem] border-2 text-left transition-all relative overflow-hidden ${newCount > 0 ? 'border-amber-100 bg-amber-50/50 dark:bg-amber-900/10 hover:border-amber-400' : 'border-slate-100 bg-slate-50 dark:bg-slate-800 opacity-50 cursor-not-allowed'}`}
+              className={`p-5 rounded-xl border-2 text-left transition-all relative overflow-hidden ${newCount > 0 ? 'border-amber-100 bg-amber-50/50 dark:bg-amber-900/10 hover:border-amber-400' : 'border-slate-100 bg-slate-50 dark:bg-slate-800 opacity-50 cursor-not-allowed'}`}
             >
               <div className="relative z-10">
                 <h3 className="text-xl font-black text-amber-700 dark:text-amber-400 mb-1">Yangi so'zlar</h3>
@@ -3375,7 +3422,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
               whileHover={{ y: -5 }}
               onClick={() => startExam('all')} 
               disabled={allCount === 0} 
-              className={`p-8 rounded-[2.5rem] border-2 text-left transition-all relative overflow-hidden ${allCount > 0 ? 'border-purple-100 bg-purple-50/50 dark:bg-purple-900/10 hover:border-purple-400' : 'border-slate-100 bg-slate-50 dark:bg-slate-800 opacity-50 cursor-not-allowed'}`}
+              className={`p-5 rounded-xl border-2 text-left transition-all relative overflow-hidden ${allCount > 0 ? 'border-purple-100 bg-purple-50/50 dark:bg-purple-900/10 hover:border-purple-400' : 'border-slate-100 bg-slate-50 dark:bg-slate-800 opacity-50 cursor-not-allowed'}`}
             >
               <div className="relative z-10">
                 <h3 className="text-xl font-black text-purple-700 dark:text-purple-400 mb-1">Barcha so'zlar</h3>
@@ -3384,7 +3431,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
               <Layers className="absolute -bottom-2 -right-2 w-16 h-16 text-purple-500/10" />
             </motion.button>
           </div>
-          <button onClick={onBack} className="w-full py-5 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-black rounded-3xl active:scale-95 transition-all">Orqaga</button>
+          <button onClick={onBack} className="w-full py-3.5 bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 font-black rounded-2xl active:scale-95 transition-all">Orqaga</button>
         </motion.div>
       </div>
     );
@@ -3406,7 +3453,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
           <div className="relative z-10">
             <Trophy className="w-24 h-24 text-amber-400 mx-auto mb-8 animate-bounce" />
             <h2 className="text-5xl font-black text-white dark:text-slate-900 mb-4">Test Yakunlandi!</h2>
-            <div className="flex justify-center gap-8 mb-12">
+            <div className="flex justify-center gap-5 mb-12">
                <div className="text-center">
                   <p className="text-white/40 dark:text-slate-400 text-xs font-bold uppercase mb-1">Natija</p>
                   <p className="text-white dark:text-slate-900 text-3xl font-black">{score} / {examWords.length}</p>
@@ -3417,7 +3464,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
                </div>
             </div>
             <p className="text-amber-400/80 font-bold mb-12 text-lg italic">"{message}"</p>
-            <button onClick={onBack} className="w-full py-6 bg-amber-400 text-slate-900 font-black rounded-[2rem] shadow-xl hover:bg-amber-300 transition-all active:scale-95">Menyuga qaytish</button>
+            <button onClick={onBack} className="w-full py-6 bg-amber-400 text-slate-900 font-black rounded-xl shadow-xl hover:bg-amber-300 transition-all active:scale-95">Menyuga qaytish</button>
           </div>
         </motion.div>
       </div>
@@ -3438,7 +3485,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
           </div>
         </div>
         <div className="flex flex-col items-center">
-          <div className="text-sm font-black text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 px-6 py-1.5 rounded-full">
+          <div className="text-sm font-black text-slate-700 dark:text-white bg-slate-100 dark:bg-slate-800 px-4 py-1.5 rounded-full">
             {currentIndex + 1} / {examWords.length}
           </div>
         </div>
@@ -3471,7 +3518,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
             onChange={e => setUserInput(e.target.value)}
             disabled={!!feedback}
             placeholder="Bu yerga yozing..."
-            className={`w-full p-8 bg-white dark:bg-slate-800 border-4 rounded-[3rem] outline-none font-black text-3xl text-center shadow-2xl transition-all ${
+            className={`w-full p-5 bg-white dark:bg-slate-800 border-4 rounded-2xl outline-none font-black text-3xl text-center shadow-2xl transition-all ${
               feedback === 'correct' ? 'border-emerald-500 text-emerald-600' : feedback === 'incorrect' ? 'border-rose-500 text-rose-600' : 'border-slate-100 dark:border-slate-700 focus:border-amber-500'
             }`}
             autoFocus
@@ -3479,7 +3526,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
           {userInput && !feedback && (
              <button 
               type="submit"
-              className="absolute right-6 top-6 bottom-6 px-10 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-[2rem] shadow-xl active:scale-95"
+              className="absolute right-6 top-6 bottom-6 px-10 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black rounded-xl shadow-xl active:scale-95"
              >
                OK
              </button>
@@ -3490,7 +3537,7 @@ function ExamMode({ words, setWords, setStats, onBack, setCoins }: any) {
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-8 bg-rose-50 dark:bg-rose-500/10 rounded-[3rem] border border-rose-100 dark:border-rose-900/30 text-center"
+            className="p-5 bg-rose-50 dark:bg-rose-500/10 rounded-2xl border border-rose-100 dark:border-rose-900/30 text-center"
           >
             <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest mb-2">To'g'ri javob</p>
             <p className="text-rose-600 dark:text-rose-400 text-4xl font-black">{currentWord.original}</p>
