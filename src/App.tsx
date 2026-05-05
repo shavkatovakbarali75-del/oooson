@@ -39,13 +39,25 @@ if (tg) {
 // Universal TTS Helper to support mobile/Telegram WebApp natively where speechSynthesis fails
 export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () => void, onError?: (err: any) => void) => {
   try {
+    // Synchronously unlock speechSynthesis on mobile browsers (iOS/Android)
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      // Playing an empty/silent utterance synchronously in the click handler unlocks the voice engine
+      const unlockUtterance = new SpeechSynthesisUtterance('');
+      unlockUtterance.volume = 0;
+      window.speechSynthesis.speak(unlockUtterance);
+    }
+
     const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text)}`;
-    const audio = new Audio(url);
+    const audio = new Audio();
+    audio.src = url;
+    audio.load(); // Crucial for iOS
     
     let started = false;
     audio.onplay = () => { started = true; onStart?.(); };
     audio.onended = () => onEnd?.();
-    audio.onerror = (e) => {
+    
+    const fallbackToSpeechSynthesis = (e: any) => {
       console.warn("Universal TTS (Audio) failed. Falling back to speechSynthesis.", e);
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
@@ -54,7 +66,7 @@ export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () 
         utterance.rate = 0.85;
         
         const voices = window.speechSynthesis.getVoices();
-        const voice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha')));
+        const voice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('English')));
         if (voice) utterance.voice = voice;
         
         utterance.onstart = () => { if (!started) onStart?.(); };
@@ -67,12 +79,12 @@ export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () 
         onError?.(new Error("No TTS support"));
       }
     };
+
+    audio.onerror = fallbackToSpeechSynthesis;
     
     const playPromise = audio.play();
     if (playPromise !== undefined) {
-      playPromise.catch(e => {
-        audio.onerror?.(e);
-      });
+      playPromise.catch(fallbackToSpeechSynthesis);
     }
   } catch (err) {
     onError?.(err);
