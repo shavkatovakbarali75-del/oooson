@@ -3,14 +3,17 @@ import dotenv from 'dotenv';
 import { db } from './firebase.js';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
-dotenv.config({ path: '.env.local' });
+try {
+  dotenv.config({ path: '.env.local' });
+} catch (e) {
+  // Ignore missing .env.local on production
+}
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const APP_URL = process.env.APP_URL || 'https://oooson.vercel.app';
 
 if (!BOT_TOKEN) {
-  console.error('❌ BOT_TOKEN topilmadi! .env.local fayliga BOT_TOKEN qo\'shing.');
-  process.exit(1);
+  console.warn('⚠️ BOT_TOKEN topilmadi! Vercel Settings -> Environment Variables orqali qo\'shing.');
 }
 
 const bot = new Bot(BOT_TOKEN);
