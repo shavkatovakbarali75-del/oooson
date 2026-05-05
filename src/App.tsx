@@ -466,6 +466,77 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
+  const [_words, _setWords] = useState<Word[]>(() => {
+    try {
+      const saved = localStorage.getItem('oson-soz-words');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(w => w && typeof w === 'object' && typeof w.original === 'string').map(w => ({
+            ...w,
+            status: w.status === 'learned' ? 'mastered' : (w.status || 'new'),
+            progress: w.progress || (w.status === 'learned' ? 100 : 0),
+            createdAt: w.createdAt || new Date().toISOString()
+          }));
+        }
+      }
+    } catch (e) {
+      console.error("Error parsing words from localStorage:", e);
+    }
+    return [
+      { id: '1', original: 'Apple', translation: 'Olma', status: 'new', progress: 0, createdAt: new Date().toISOString() },
+      { id: '2', original: 'Book', translation: 'Kitob', status: 'new', progress: 0, createdAt: new Date().toISOString() },
+      { id: '3', original: 'Computer', translation: 'Kompyuter', status: 'new', progress: 0, createdAt: new Date().toISOString() },
+    ];
+  });
+  const words = _words;
+
+  const [streak, setStreak] = useState(() => {
+    try {
+      const saved = localStorage.getItem('oson-soz-streak');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const today = getLocalDate();
+        const yesterday = getLocalDate(Date.now() - 86400000);
+        if (parsed.lastActive === today) return parsed.count;
+        if (parsed.lastActive === yesterday) return parsed.count;
+        return 0;
+      }
+    } catch { return 0; }
+    return 0;
+  });
+
+  const [stats, setStats] = useState<Record<string, DailyStats>>(() => {
+    try {
+      const saved = localStorage.getItem('oson-soz-stats');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const [_coins, _setCoins] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('oson-soz-coins');
+      return saved ? parseInt(saved, 10) : 0;
+    } catch (e) {
+      return 0;
+    }
+  });
+  const coins = _coins;
+
+  const [activeTab, setActiveTab] = useState<'home' | 'list' | 'topics' | 'practice' | 'profile' | 'admin'>('home');
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (tg) return tg.colorScheme === 'dark';
+    try { return localStorage.getItem('oson-soz-theme') === 'dark'; } catch { return false; }
+  });
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  const [newLevelReached, setNewLevelReached] = useState(1);
+  const [newTitleReached, setNewTitleReached] = useState('');
+  
+  const totalLearned = useMemo(() => words.filter(w => w.status === 'mastered').length, [words]);
+  const isAdmin = userProfile?.role === 'admin' || user?.email === 'shavkatovakbarali75@gmail.com';
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -649,31 +720,6 @@ export default function App() {
     }
   };
 
-  const [_words, _setWords] = useState<Word[]>(() => {
-    try {
-      const saved = localStorage.getItem('oson-soz-words');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.filter(w => w && typeof w === 'object' && typeof w.original === 'string').map(w => ({
-            ...w,
-            status: w.status === 'learned' ? 'mastered' : (w.status || 'new'),
-            progress: w.progress || (w.status === 'learned' ? 100 : 0),
-            createdAt: w.createdAt || new Date().toISOString()
-          }));
-        }
-      }
-    } catch (e) {
-      console.error("Error parsing words from localStorage:", e);
-    }
-    return [
-      { id: '1', original: 'Apple', translation: 'Olma', status: 'new', progress: 0, createdAt: new Date().toISOString() },
-      { id: '2', original: 'Book', translation: 'Kitob', status: 'new', progress: 0, createdAt: new Date().toISOString() },
-      { id: '3', original: 'Computer', translation: 'Kompyuter', status: 'new', progress: 0, createdAt: new Date().toISOString() },
-    ];
-  });
-  const words = _words;
-
   const setWords = useCallback((action: React.SetStateAction<Word[]>) => {
     _setWords(prev => {
       const next = typeof action === 'function' ? (action as any)(prev) : action;
@@ -723,58 +769,6 @@ export default function App() {
       return next;
     });
   }, [user]);
-
-  const [activeTab, setActiveTab] = useState<'home' | 'list' | 'topics' | 'practice' | 'profile' | 'admin'>('home');
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    // Telegram Mini App temasini aniqlash
-    if (tg) return tg.colorScheme === 'dark';
-    try { return localStorage.getItem('oson-soz-theme') === 'dark'; } catch { return false; }
-  });
-  const isAdmin = userProfile?.role === 'admin' || user?.email === 'shavkatovakbarali75@gmail.com';
-  const [streak, setStreak] = useState(() => {
-    try {
-      const saved = localStorage.getItem('oson-soz-streak');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const today = getLocalDate();
-        const yesterday = getLocalDate(Date.now() - 86400000);
-        
-        // Recover streak for the user if it dropped today
-        if ((parsed.count < 3) && parsed.lastActive === today && localStorage.getItem('oson-soz-recovered') !== 'true') {
-           // We will let the interval or userProfile handle full sync, but we can temporarily give 3 here
-        }
-
-        if (parsed.lastActive === today) return parsed.count;
-        if (parsed.lastActive === yesterday) return parsed.count;
-        return 0; // Streak broken
-      }
-    } catch { return 0; }
-    return 0;
-  });
-
-  const [stats, setStats] = useState<Record<string, DailyStats>>(() => {
-    try {
-      const saved = localStorage.getItem('oson-soz-stats');
-      return saved ? JSON.parse(saved) : {};
-    } catch (e) {
-      return {};
-    }
-  });
-
-  const [_coins, _setCoins] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('oson-soz-coins');
-      return saved ? parseInt(saved, 10) : 0;
-    } catch (e) {
-      return 0;
-    }
-  });
-  const coins = _coins;
-  const [showLevelUp, setShowLevelUp] = useState(false);
-  const [newLevelReached, setNewLevelReached] = useState(1);
-  const [newTitleReached, setNewTitleReached] = useState('');
-
-  const totalLearned = useMemo(() => words.filter(w => w.status === 'mastered').length, [words]);
 
   useEffect(() => {
     if (user && words.length > 0) {
