@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { GoogleGenAI, Modality } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import { Plus, Image as ImageIcon, Volume2, Search, BookOpen, Trash2, ArrowRight, ArrowLeft, List, Play, Loader2, Compass, ShoppingBag, Plane, Coffee, Briefcase, GraduationCap, Trophy, Sparkles, CheckCircle2, Dumbbell, BarChart2, CheckCircle, XCircle, Timer, Award, Target, Zap, Moon, Sun, Flame, Download, Upload, Mic, UserCircle, LogOut, Edit3, Save, X, Camera, Keyboard, Layers, Link as LinkIcon, Eye, Heart, Gamepad2, Ghost, Skull, Lock, Crown, Users, PieChart, Clock, Star, Book, Shield } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -474,6 +474,7 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showForceStart, setShowForceStart] = useState(false);
 
   const [_words, _setWords] = useState<Word[]>(() => {
     try {
@@ -552,6 +553,24 @@ export default function App() {
       handleLogin();
     }
   }, [isAuthReady, user, isLoggingIn]);
+
+  // Fallback timeout for loading screen
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowForceStart(true);
+    }, 5000);
+
+    const timeout = setTimeout(() => {
+      if (!isAuthReady) {
+        console.warn("Auth initialization timed out, forcing start...");
+        setIsAuthReady(true);
+      }
+    }, 12000);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(timeout);
+    };
+  }, [isAuthReady]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -968,9 +987,23 @@ function BackgroundBlobs() {
         >
           <Logo className="w-16 h-16" />
         </motion.div>
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">Yuklanmoqda...</p>
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+            <p className="text-slate-400 font-bold text-sm tracking-widest uppercase">Yuklanmoqda...</p>
+          </div>
+          
+          {showForceStart && (
+            <motion.button
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              onClick={() => setIsAuthReady(true)}
+              className="mt-4 px-6 py-3 bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-bold rounded-2xl border border-white/10 transition-all flex items-center gap-2"
+            >
+              <Zap className="w-4 h-4 text-primary-500" />
+              <span>Kutishni to'xtatish</span>
+            </motion.button>
+          )}
         </div>
       </div>
     );
