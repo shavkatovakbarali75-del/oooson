@@ -47,7 +47,8 @@ export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () 
       const isSentence = text.trim().split(/\s+/).length > 2;
       
       const youdaoUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(text)}&type=2`;
-      const googleUrl = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text.substring(0, 200))}`;
+      // Use client=tw-ob on translate.google.com which is more reliable and doesn't return 0 bytes for long texts
+      const googleUrl = `https://translate.google.com/translate_tts?client=tw-ob&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text.substring(0, 200))}`;
       
       const primaryUrl = isSentence ? googleUrl : youdaoUrl;
       const secondaryUrl = isSentence ? youdaoUrl : googleUrl;
