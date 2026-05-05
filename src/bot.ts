@@ -131,3 +131,15 @@ bot.on('message:text', async (ctx) => {
 });
 
 export { bot };
+
+// If run directly, start the bot in long-polling mode
+if (process.argv[1] && (process.argv[1].endsWith('bot.ts') || process.argv[1].endsWith('bot.js'))) {
+  console.log("Oson So'z botini long-polling rejimida ishga tushirish...");
+  bot.api.deleteWebhook().then(() => {
+    bot.start({
+      onStart: (botInfo) => {
+        console.log(`✅ Bot muvaffaqiyatli ishga tushdi: @${botInfo.username}`);
+      }
+    });
+  }).catch(console.error);
+}

@@ -39,52 +39,72 @@ if (tg) {
 // Universal TTS Helper to support mobile/Telegram WebApp natively where speechSynthesis fails
 export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () => void, onError?: (err: any) => void) => {
   try {
-    // Synchronously unlock speechSynthesis on mobile browsers (iOS/Android)
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      // Playing an empty/silent utterance synchronously in the click handler unlocks the voice engine
-      const unlockUtterance = new SpeechSynthesisUtterance('');
-      unlockUtterance.volume = 0;
-      window.speechSynthesis.speak(unlockUtterance);
-    }
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
-    const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text)}`;
-    const audio = new Audio();
-    audio.src = url;
-    audio.load(); // Crucial for iOS
-    
-    let started = false;
-    audio.onplay = () => { started = true; onStart?.(); };
-    audio.onended = () => onEnd?.();
-    
-    const fallbackToSpeechSynthesis = (e: any) => {
-      console.warn("Universal TTS (Audio) failed. Falling back to speechSynthesis.", e);
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        utterance.rate = 0.85;
-        
-        const voices = window.speechSynthesis.getVoices();
-        const voice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('English')));
-        if (voice) utterance.voice = voice;
-        
-        utterance.onstart = () => { if (!started) onStart?.(); };
-        utterance.onend = () => onEnd?.();
-        utterance.onerror = (err) => {
-          if (err.error !== 'canceled') onError?.(err);
-        };
-        window.speechSynthesis.speak(utterance);
-      } else {
-        onError?.(new Error("No TTS support"));
+    const playFallbackAudio = () => {
+      // dict.youdao.com is often more reliable and less likely to be blocked than translate.googleapis.com
+      const url = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(text)}&type=2`;
+      const audio = new Audio(url);
+      
+      let started = false;
+      audio.onplay = () => { started = true; onStart?.(); };
+      audio.onended = () => onEnd?.();
+      audio.onerror = (e) => onError?.(e);
+      
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((e) => {
+          console.warn("Fallback Audio TTS failed", e);
+          
+          // Secondary fallback to Google TTS if Youdao fails
+          const googleUrl = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text)}`;
+          const googleAudio = new Audio(googleUrl);
+          googleAudio.onplay = () => { started = true; onStart?.(); };
+          googleAudio.onended = () => onEnd?.();
+          googleAudio.onerror = (err) => onError?.(err);
+          const gp = googleAudio.play();
+          if (gp !== undefined) gp.catch(err => onError?.(err));
+        });
       }
     };
 
-    audio.onerror = fallbackToSpeechSynthesis;
-    
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(fallbackToSpeechSynthesis);
+    // Primary: Web Speech API. 
+    // It is synchronous with user gestures (fixes iOS Safari blocks) and doesn't rely on external network.
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-US';
+      utterance.rate = 0.85; // Slightly slower for language learners
+      
+      const voices = window.speechSynthesis.getVoices();
+      let voice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('English')));
+      if (!voice) voice = voices.find(v => v.lang.startsWith('en'));
+      if (voice) utterance.voice = voice;
+      
+      let started = false;
+      utterance.onstart = () => { started = true; onStart?.(); };
+      utterance.onend = () => onEnd?.();
+      utterance.onerror = (err) => {
+        if (err.error !== 'canceled') {
+          playFallbackAudio();
+        }
+      };
+      
+      window.speechSynthesis.speak(utterance);
+      
+      // Safety timeout: some Android WebViews silently fail to start SpeechSynthesis.
+      // If it doesn't start in 600ms, we cancel and try the Audio fallback.
+      // We skip this timeout check on iOS because iOS is strict about async Audio playback.
+      if (!isIOS) {
+        setTimeout(() => {
+          if (!started) {
+            window.speechSynthesis.cancel();
+            playFallbackAudio();
+          }
+        }, 600);
+      }
+    } else {
+      playFallbackAudio();
     }
   } catch (err) {
     onError?.(err);
