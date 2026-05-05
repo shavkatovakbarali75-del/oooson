@@ -15,8 +15,9 @@ if (!BOT_TOKEN) {
 
 const bot = new Bot(BOT_TOKEN);
 
-// Simple in-memory state management for registration steps
-const registrationState = new Map<number, { step: 'WAITING_NAME', phone: string }>();
+// In a serverless environment, we cannot use in-memory state.
+// We will use Firestore to track if a user is in the 'WAITING_NAME' step
+// by checking if their document exists but has an empty string for the 'name' field.
 
 // Error handler
 bot.catch((err) => {
@@ -72,12 +73,22 @@ bot.on('message:contact', async (ctx) => {
     return;
   }
 
-  // Save to state and ask for name
-  registrationState.set(userId, { step: 'WAITING_NAME', phone });
+  try {
+    // Save to Firestore with an empty name to indicate we are waiting for name input
+    await setDoc(doc(db, 'telegram_users', userId.toString()), {
+      telegramId: userId,
+      phone: phone,
+      name: "", // Empty name acts as our 'WAITING_NAME' state
+      registeredAt: new Date().toISOString()
+    });
 
-  await ctx.reply("Rahmat! Endi platformada ko'rinadigan ismingizni kiriting (masalan, Akbarali):", {
-    reply_markup: { remove_keyboard: true }
-  });
+    await ctx.reply("Rahmat! Endi platformada ko'rinadigan ismingizni kiriting (masalan, Akbarali):", {
+      reply_markup: { remove_keyboard: true }
+    });
+  } catch (err) {
+    console.error("Error saving phone number:", err);
+    await ctx.reply("Kechirasiz, xatolik yuz berdi. Iltimos qaytadan urinib ko'ring.");
+  }
 });
 
 // Handle text messages (for name input and general)
@@ -85,37 +96,30 @@ bot.on('message:text', async (ctx) => {
   const userId = ctx.from.id;
   const text = ctx.message.text;
 
-  // Check if user is in registration process
-  if (registrationState.has(userId)) {
-    const state = registrationState.get(userId);
-    if (state?.step === 'WAITING_NAME') {
-      const phone = state.phone;
+  try {
+    // Check if user is in registration process via Firestore
+    const docRef = doc(db, 'telegram_users', userId.toString());
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists() && docSnap.data().name === "") {
       const name = text.trim();
 
-      try {
-        // Save to Firebase
-        await setDoc(doc(db, 'telegram_users', userId.toString()), {
-          telegramId: userId,
-          phone: phone,
-          name: name,
-          registeredAt: new Date().toISOString()
-        });
+      // Save the final name to Firebase
+      await setDoc(docRef, {
+        ...docSnap.data(),
+        name: name
+      });
 
-        // Clear state
-        registrationState.delete(userId);
-
-        // Send success message and WebApp button
-        const keyboard = new InlineKeyboard().webApp("📚 Oson So'z'ni ochish", APP_URL);
-        await ctx.reply(
-          `Tabriklaymiz, ${name}! 🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz.\n\nEndi quyidagi tugma orqali ilovaga kirishingiz mumkin. 👇`,
-          { reply_markup: keyboard }
-        );
-      } catch (err) {
-        console.error("Error saving user:", err);
-        await ctx.reply("Kechirasiz, ro'yxatdan o'tishda xatolik yuz berdi.");
-      }
+      // Send success message and WebApp button
+      const keyboard = new InlineKeyboard().webApp("📚 Oson So'z'ni ochish", APP_URL);
+      await ctx.reply(
+        `Tabriklaymiz, ${name}! 🎉 Muvaffaqiyatli ro'yxatdan o'tdingiz.\n\nEndi quyidagi tugma orqali ilovaga kirishingiz mumkin. 👇`,
+        { reply_markup: keyboard }
+      );
       return;
     }
+  } catch (err) {
+    console.error("Error checking/saving user state:", err);
   }
 
   // Normal text response
@@ -126,16 +130,4 @@ bot.on('message:text', async (ctx) => {
   );
 });
 
-// Botni ishga tushirish
-bot.start({
-  onStart: (botInfo) => {
-    console.log(`\n🤖 Oson So'z Bot ishga tushdi!`);
-    console.log(`   Bot: @${botInfo.username}`);
-    console.log(`   App URL: ${APP_URL}`);
-    console.log(`\n   Telegram'da ochish: https://t.me/${botInfo.username}\n`);
-  },
-});
-
-// Graceful shutdown
-process.once('SIGINT', () => bot.stop());
-process.once('SIGTERM', () => bot.stop());
+export { bot };

@@ -146,6 +146,26 @@ service cloud.firestore {
     // Rules
     // ===============================================================
 
+    // Telegram bot users collection
+    // Bot uses client SDK without Firebase Auth, so we allow controlled access
+    match /telegram_users/{telegramId} {
+      allow read: if true;
+      
+      allow create: if request.resource.data.keys().hasAll(['telegramId', 'phone', 'name', 'registeredAt']) &&
+                       request.resource.data.telegramId is number &&
+                       request.resource.data.phone is string &&
+                       request.resource.data.name is string &&
+                       request.resource.data.registeredAt is string;
+      
+      allow update: if request.resource.data.keys().hasAll(['telegramId', 'phone', 'name', 'registeredAt']) &&
+                       request.resource.data.telegramId is number &&
+                       request.resource.data.phone is string &&
+                       request.resource.data.name is string &&
+                       request.resource.data.registeredAt is string;
+      
+      allow delete: if isAdmin();
+    }
+
     match /public_profiles/{userId} {
       allow read: if true;
       
