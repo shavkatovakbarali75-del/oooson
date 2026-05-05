@@ -42,9 +42,17 @@ export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () 
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
     const playFallbackAudio = () => {
-      // dict.youdao.com is often more reliable and less likely to be blocked than translate.googleapis.com
-      const url = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(text)}&type=2`;
-      const audio = new Audio(url);
+      // dict.youdao.com fails (HTTP 500) for sentences or long phrases.
+      // So if the text has multiple words, we MUST use Google TTS as the primary fallback.
+      const isSentence = text.trim().split(/\s+/).length > 2;
+      
+      const youdaoUrl = `https://dict.youdao.com/dictvoice?audio=${encodeURIComponent(text)}&type=2`;
+      const googleUrl = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text.substring(0, 200))}`;
+      
+      const primaryUrl = isSentence ? googleUrl : youdaoUrl;
+      const secondaryUrl = isSentence ? youdaoUrl : googleUrl;
+
+      const audio = new Audio(primaryUrl);
       
       let started = false;
       audio.onplay = () => { started = true; onStart?.(); };
@@ -54,15 +62,14 @@ export const playUniversalTTS = (text: string, onStart?: () => void, onEnd?: () 
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch((e) => {
-          console.warn("Fallback Audio TTS failed", e);
+          console.warn(`Primary Fallback Audio TTS failed (${isSentence ? 'Google' : 'Youdao'})`, e);
           
-          // Secondary fallback to Google TTS if Youdao fails
-          const googleUrl = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=en-US&q=${encodeURIComponent(text)}`;
-          const googleAudio = new Audio(googleUrl);
-          googleAudio.onplay = () => { started = true; onStart?.(); };
-          googleAudio.onended = () => onEnd?.();
-          googleAudio.onerror = (err) => onError?.(err);
-          const gp = googleAudio.play();
+          // Secondary fallback
+          const secondaryAudio = new Audio(secondaryUrl);
+          secondaryAudio.onplay = () => { started = true; onStart?.(); };
+          secondaryAudio.onended = () => onEnd?.();
+          secondaryAudio.onerror = (err) => onError?.(err);
+          const gp = secondaryAudio.play();
           if (gp !== undefined) gp.catch(err => onError?.(err));
         });
       }
